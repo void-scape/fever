@@ -2,6 +2,7 @@ use crate::markov::Markov;
 #[cfg(debug_assertions)]
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::{
+    asset::AssetMetaCheck,
     input::mouse::MouseWheel,
     prelude::*,
     render::render_resource::{AsBindGroup, ShaderType},
@@ -15,17 +16,36 @@ mod markov;
 fn main() {
     let mut app = App::new();
 
-    app.add_plugins((DefaultPlugins, bevy_seedling::SeedlingPlugin::default()))
-        .add_plugins((
-            Material2dPlugin::<FractalUniform>::default(),
-            markov::plugin,
-        ))
-        .insert_resource(ClearColor(Color::BLACK))
-        .add_systems(Startup, (camera, spawn_fractal, spawn_key))
-        .add_systems(
-            Update,
-            (stationary, params, move_fractal, fade_c_plane, collect_key).chain(),
-        );
+    app.add_plugins((
+        DefaultPlugins
+            .set(AssetPlugin {
+                // Wasm builds will check for meta files (that don't exist) if this isn't set.
+                // This causes errors and even panics on web build on itch.
+                // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Window {
+                    title: "fever".to_string(),
+                    fit_canvas_to_parent: true,
+                    ..default()
+                }
+                .into(),
+                ..default()
+            }),
+        bevy_seedling::SeedlingPlugin::default(),
+    ))
+    .add_plugins((
+        Material2dPlugin::<FractalUniform>::default(),
+        markov::plugin,
+    ))
+    .insert_resource(ClearColor(Color::BLACK))
+    .add_systems(Startup, (camera, spawn_fractal, spawn_key))
+    .add_systems(
+        Update,
+        (stationary, params, move_fractal, fade_c_plane, collect_key).chain(),
+    );
 
     #[cfg(debug_assertions)]
     app.add_plugins(FpsOverlayPlugin {
@@ -90,6 +110,7 @@ fn spawn_fractal(
         cx: 0.0,
         cy: 0.0,
         zoom: ZOOM,
+        _pad: Default::default(),
     };
 
     commands.spawn((
@@ -114,6 +135,7 @@ struct Params {
     cx: f32,
     cy: f32,
     zoom: f32,
+    _pad: UVec3,
 }
 
 fn params(

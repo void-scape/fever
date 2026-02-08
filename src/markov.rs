@@ -1,10 +1,10 @@
 use bevy::prelude::*;
-use rand::{Rng, seq::IndexedRandom};
+use rand::{seq::IndexedRandom, Rng};
 use std::{alloc::Layout, collections::HashMap, fmt::Write, slice, str};
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, |mut commands: Commands| {
-        commands.spawn(markov("assets/dc.txt"));
+        commands.spawn(markov(include_str!("../assets/dc.txt")));
     });
 }
 
@@ -19,12 +19,10 @@ impl Markov {
     }
 }
 
-fn markov(path: &str) -> Markov {
-    let input = std::fs::read_to_string(path).unwrap();
-
+fn markov(input: &str) -> Markov {
     // arena is leaked and never unallocated
     let mut arena = Arena::new(1024);
-    let tokens = tokenize_input(&mut arena, &input);
+    let tokens = tokenize_input(&mut arena, input);
 
     let mut sorted_tokens = tokens.iter().collect::<Vec<_>>();
     sorted_tokens.sort_by_key(|(_, c)| *c);

@@ -6,6 +6,7 @@ struct Fractal {
     cx: f32,
     cy: f32,
     zoom: f32,
+	_pad: vec3<u32>,
 }
 
 @group(2) @binding(0) var<uniform> args: Fractal;
