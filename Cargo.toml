@@ -1,0 +1,47 @@
+[package]
+name = "fever"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["debug"]
+debug = [
+	"bevy/dynamic_linking",
+	"bevy/debug",
+	"bevy/track_location",
+	"bevy/bevy_dev_tools",
+]
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+	"2d_bevy_render",
+	"default_app",
+	"default_platform",
+	"ui_api",
+	"ui_bevy_render",
+	"jpeg",
+] }
+bevy_seedling = { version = "0.7", features = ["hrtf"] }
+rand = "0.9.2"
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# Enable more optimization in the release profile at the cost of compile time.
+[profile.release]
+# Compile the entire crate as one unit.
+# Slows compile times, marginal improvements.
+codegen-units = 1
+# Do a second optimization pass over the entire program, including dependencies.
+# Slows compile times, marginal improvements.
+lto = "thin"
+
+# Optimize for size in the wasm-release profile to reduce load times and bandwidth usage on web.
+[profile.wasm-release]
+# Default to release profile values.
+inherits = "release"
+# Optimize with size in mind (also try "z", sometimes it is better).
+# Slightly slows compile times, great improvements to file size and runtime performance.
+opt-level = "s"
+# Strip all debugging information from the binary to slightly reduce file size.
+strip = "debuginfo"
