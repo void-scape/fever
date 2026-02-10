@@ -33,7 +33,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 	let sz = textureDimensions(texture);
 	let aspect = f32(sz.x) / f32(sz.y);
 	let c = vec2(args.cx, args.cy);
-	var z = (mesh.uv * 2.0 - 1.0) * args.zoom;
+	var z = (vec2(mesh.uv.x, 1.0 - mesh.uv.y) * 2.0 - 1.0) * args.zoom;
 	for (var i = 0; i < i32(args.iterations); i++) {
 		if length(z) > args.escape_radius * args.escape_radius {
 			break;

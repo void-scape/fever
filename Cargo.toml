@@ -11,6 +11,7 @@ debug = [
 	"bevy/track_location",
 	"bevy/bevy_dev_tools",
 ]
+explore = []
 
 [dependencies]
 bevy = { version = "0.18", default-features = false, features = [
@@ -30,6 +31,7 @@ tracing = { version = "0.1", features = [
 	"release_max_level_warn",
 ] }
 bevy_seedling = { version = "0.7", features = ["hrtf"] }
+bevy_asset_loader = "0.25.0"
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
