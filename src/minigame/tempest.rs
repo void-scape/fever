@@ -9,8 +9,10 @@ use crate::{
 };
 use bevy::{color::palettes::css::YELLOW, prelude::*};
 use bevy_asset_loader::prelude::*;
+use bevy_rand::{global::GlobalRng, prelude::WyRand};
 use bevy_seedling::prelude::*;
-use std::f32::consts::PI;
+use rand::Rng;
+use std::f32::consts::{PI, TAU};
 
 pub fn plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<TempestAssets>())
@@ -31,40 +33,88 @@ pub fn plugin(app: &mut App) {
 
 #[derive(AssetCollection, Resource)]
 struct TempestAssets {
-    // TODO: different images
-    #[asset(path = "images/fractals/god.png")]
-    god: Handle<Image>,
+    #[asset(path = "images/fractals/last-breath.png")]
+    last_breath: Handle<Image>,
+    #[asset(path = "images/fractals/star-ship.png")]
+    star_ship: Handle<Image>,
     //
-    // TODO: different music
-    #[asset(path = "music/rabbit.wav")]
-    rabbit: Handle<AudioSample>,
+    #[asset(path = "music/wash-over.ogg")]
+    wash_over: Handle<AudioSample>,
+    #[asset(path = "music/fall-apart.ogg")]
+    fall_apart: Handle<AudioSample>,
+    #[asset(path = "music/melo.ogg")]
+    melo: Handle<AudioSample>,
 }
 
 #[derive(Component)]
 #[require(Transform)]
 struct SceneRoot;
 
-fn init_targets(mut commands: Commands, assets: Res<TempestAssets>) {
-    let scenes = children![scene(
-        &mut commands,
-        assets.god.clone(),
-        assets.rabbit.clone(),
-        || children![
-            (
-                Player(0.0),
-                Sprite::from_color(YELLOW, Vec2::new(50.0, 20.0)),
-                Transform::from_xyz(RADIUS, 0.0, 1.0),
-            ),
-            Spawner {
-                timer: Timer::from_seconds(0.5, TimerMode::Repeating),
-                wave: 0,
-                enemies: 8,
-            }
-        ]
-    )];
+fn init_targets(
+    mut commands: Commands,
+    assets: Res<TempestAssets>,
+    mut rng: Single<&mut WyRand, With<GlobalRng>>,
+) {
+    let p0 = rng.random_range(0.0..TAU);
+    let p1 = rng.random_range(0.0..TAU);
+    let p2 = rng.random_range(0.0..TAU);
+    let scenes = children![
+        scene(
+            &mut commands,
+            assets.last_breath.clone(),
+            assets.wash_over.clone(),
+            move || children![
+                (
+                    Player(p0),
+                    Sprite::from_color(YELLOW, Vec2::new(50.0, 20.0)),
+                    Transform::from_xyz(RADIUS, 0.0, 1.0),
+                ),
+                Spawner {
+                    timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+                    wave: 0,
+                    enemies: 8,
+                }
+            ]
+        ),
+        scene(
+            &mut commands,
+            assets.star_ship.clone(),
+            assets.fall_apart.clone(),
+            move || children![
+                (
+                    Player(p1),
+                    Sprite::from_color(YELLOW, Vec2::new(50.0, 20.0)),
+                    Transform::from_xyz(RADIUS, 0.0, 1.0),
+                ),
+                Spawner {
+                    timer: Timer::from_seconds(0.4, TimerMode::Repeating),
+                    wave: 0,
+                    enemies: 10,
+                }
+            ]
+        ),
+        scene(
+            &mut commands,
+            assets.star_ship.clone(),
+            assets.melo.clone(),
+            move || children![
+                (
+                    Player(p2),
+                    Sprite::from_color(YELLOW, Vec2::new(50.0, 20.0)),
+                    Transform::from_xyz(RADIUS, 0.0, 1.0),
+                ),
+                Spawner {
+                    timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+                    wave: 0,
+                    enemies: 7,
+                }
+            ]
+        )
+    ];
 
     commands.spawn((
         MinigameRoot,
+        DespawnOnExit(GameState::Playing),
         Minigame::Tempest,
         Description("DODGE\n(A/D)"),
         children![(VariationSet, scenes)],

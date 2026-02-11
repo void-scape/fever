@@ -11,6 +11,8 @@ use bevy::{
 use bevy_asset_loader::prelude::*;
 use bevy_seedling::prelude::*;
 
+const DEBUGGER: bool = false;
+
 pub fn plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<PathAssets>())
         .add_systems(OnEnter(GameState::Playing), init_targets)
@@ -25,15 +27,17 @@ pub fn plugin(app: &mut App) {
 
 #[derive(AssetCollection, Resource)]
 struct PathAssets {
-    // TODO: different images
     #[asset(path = "images/fractals/god.png")]
     god: Handle<Image>,
+    #[asset(path = "images/fractals/star-ship.png")]
+    star_ship: Handle<Image>,
+    #[asset(path = "images/fractals/contrast.png")]
+    contrast: Handle<Image>,
     //
-    // TODO: different music
-    #[asset(path = "music/bong.wav")]
-    bong: Handle<AudioSample>,
-    #[asset(path = "music/rabbit.wav")]
-    rabbit: Handle<AudioSample>,
+    #[asset(path = "music/power-life.ogg")]
+    power_life: Handle<AudioSample>,
+    #[asset(path = "music/zap.ogg")]
+    zap: Handle<AudioSample>,
     //
     #[asset(path = "sfx/hovered.ogg")]
     hovered: Handle<AudioSample>,
@@ -58,37 +62,56 @@ fn init_targets(
 
     commands.spawn((
         MinigameRoot,
+        DespawnOnExit(GameState::Playing),
         Minigame::Path,
-        Description("INTERSECT TARGETS\n(MOUSE)"),
+        Description("FIND THE TARGET\n(MOUSE)"),
         children![(
             VariationSet,
             children![
                 target(
-                    10.0,
+                    8.0,
                     assets.god.clone(),
-                    assets.rabbit.clone(),
+                    assets.zap.clone(),
                     children![
-                        (Disabled, Target(10.0), ctransform(-0.5627136, 0.0018424888)),
-                        (Disabled, Target(10.0), ctransform(-0.79316336, -0.35562518)),
-                        (Disabled, Target(10.0), ctransform(-0.18567663, -0.57410425)),
+                        (Disabled, Target(10.0), ctransform(0.12925337, 0.7643622)),
+                        (Disabled, Target(10.0), ctransform(-0.43770975, 0.9620131)),
+                        (Disabled, Target(10.0), ctransform(-0.60180664, -0.07361984)),
+                        (Disabled, Target(10.0), ctransform(0.48981094, 0.8597144)),
                     ],
                 ),
                 target(
-                    10.0,
-                    assets.god.clone(),
-                    assets.bong.clone(),
+                    8.0,
+                    assets.star_ship.clone(),
+                    assets.power_life.clone(),
                     children![
-                        (Disabled, Target(10.0), ctransform(-0.8701706, 0.20652005)),
-                        (
-                            Disabled,
-                            Target(10.0),
-                            ctransform(-0.73051834, -0.085132554)
-                        ),
-                        (Disabled, Target(10.0), ctransform(-0.5151634, -0.14848703)),
-                        (Disabled, Target(10.0), ctransform(-0.33082193, -0.12422559)),
-                        (Disabled, Target(10.0), ctransform(-0.14261243, 0.461071)),
-                        (Disabled, Target(10.0), ctransform(-0.4313813, 0.48950952)),
-                        (Disabled, Target(10.0), ctransform(-0.57834625, 0.41619867)),
+                        (Disabled, Target(10.0), ctransform(0.39360046, 0.22105403)),
+                        (Disabled, Target(10.0), ctransform(0.50511175, 0.39056396)),
+                        (Disabled, Target(10.0), ctransform(0.48820877, 0.6109084)),
+                        (Disabled, Target(10.0), ctransform(0.26229095, 0.81796634)),
+                        (Disabled, Target(10.0), ctransform(-0.21299359, 0.64798725)),
+                    ],
+                ),
+                target(
+                    8.0,
+                    assets.contrast.clone(),
+                    assets.zap.clone(),
+                    children![
+                        (Disabled, Target(10.0), ctransform(-0.3643189, -0.6188507)),
+                        (Disabled, Target(10.0), ctransform(-0.5354081, -0.6015929)),
+                        (Disabled, Target(10.0), ctransform(-0.16873938, -0.64779276)),
+                        (Disabled, Target(10.0), ctransform(-0.60802084, -0.17068857)),
+                        (Disabled, Target(10.0), ctransform(-0.4474144, 0.020050056)),
+                    ],
+                ),
+                target(
+                    8.0,
+                    assets.star_ship.clone(),
+                    assets.power_life.clone(),
+                    children![
+                        (Disabled, Target(10.0), ctransform(0.074550614, -0.54670715)),
+                        (Disabled, Target(10.0), ctransform(-0.21527101, -0.62417215)),
+                        (Disabled, Target(10.0), ctransform(0.073577866, -0.39602274)),
+                        (Disabled, Target(10.0), ctransform(-0.2700196, -0.27401727)),
                     ],
                 ),
             ]
@@ -101,6 +124,7 @@ fn init_targets(
         music: Handle<AudioSample>,
         targets: impl Bundle,
     ) -> impl Bundle {
+        let time = if DEBUGGER { 9999999.0 } else { time };
         (
             Variation,
             StartTimer(time),
@@ -138,8 +162,8 @@ fn intersect_targets(
     camera: Single<(&Camera, &GlobalTransform)>,
     assets: Res<PathAssets>,
     //
-    // input: Res<ButtonInput<KeyCode>>,
-    // mut position: Local<Vec2>,
+    input: Res<ButtonInput<KeyCode>>,
+    mut position: Local<Vec2>,
 ) {
     for (_, target, transform, is_hovered) in targets.iter() {
         gizmos.circle_2d(
@@ -159,15 +183,17 @@ fn intersect_targets(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate())
     {
-        let c = Vec2::new(w_to_c(w.x), w_to_c(w.y));
+        let mut c = Vec2::new(w_to_c(w.x), w_to_c(w.y));
 
-        // if input.pressed(KeyCode::ShiftLeft) {
-        //     *position = c;
-        // }
-        // if input.just_pressed(KeyCode::KeyA) {
-        //     println!("{c}");
-        // }
-        // let c = *position;
+        if DEBUGGER {
+            if input.pressed(KeyCode::ShiftLeft) {
+                *position = c;
+            }
+            if input.just_pressed(KeyCode::KeyA) {
+                println!("{c}");
+            }
+            c = *position;
+        }
 
         let mut path = vec![Vec2::ZERO];
         let mut z = Vec2::ZERO;

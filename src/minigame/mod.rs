@@ -29,6 +29,7 @@ mod dream;
 mod matching;
 mod path;
 mod tempest;
+mod typing;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((
@@ -37,12 +38,14 @@ pub fn plugin(app: &mut App) {
         path::plugin,
         tempest::plugin,
         dream::plugin,
+        typing::plugin,
     ))
     .add_sub_state::<Minigame>()
     .add_loading_state(LoadingState::new(GameState::Loading).load_collection::<MinigameAssets>())
     .add_observer(end_timer)
     .add_systems(OnEnter(Minigame::None), start)
     .add_systems(OnEnter(Minigame::Choose), choose)
+    .add_systems(OnExit(Minigame::Choose), available_after)
     .add_systems(OnEnter(Minigame::Countdown), start_count_down)
     .add_systems(OnEnter(Minigame::Description), description)
     .add_systems(OnEnter(Minigame::Success), success)
@@ -125,7 +128,7 @@ fn text_transition<M>(
         children![(
             text,
             TextFont::from_font_size(100.0),
-            TextLayout::new(Justify::Center, LineBreak::NoWrap),
+            TextLayout::new_with_justify(Justify::Center),
         )],
     ));
     debug_assert!(despawn_on_exit.is_some() || despawn_on_enter.is_some());
@@ -150,6 +153,7 @@ pub enum Minigame {
     Path,
     Tempest,
     Dream,
+    Typing,
     //
     Success,
     Failure,
@@ -164,9 +168,10 @@ struct Chosen;
 
 fn choose(
     mut commands: Commands,
-    available: Query<Entity, With<MinigameRoot>>,
+    available: Query<Entity, (With<MinigameRoot>, Without<AvailableAfter>)>,
     mut camera: Single<&mut Transform, With<Camera>>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
+    mut writer: MessageWriter<AppExit>,
 ) {
     camera.translation = Vec3::ZERO;
     let next = if RANDOM {
@@ -185,7 +190,8 @@ fn choose(
         // TODO: finish screen
         // NOTE: changing this will cause the success and failure screens to not
         // be despawned!!!!!
-        panic!("finished");
+        // panic!("finished");
+        writer.write(AppExit::Success);
     }
 }
 
@@ -208,6 +214,9 @@ fn start_count_down(mut commands: Commands, assets: Res<MinigameAssets>) {
         ImageNode::new(assets.three.clone()),
         ZIndex(10_000),
         Node {
+            position_type: PositionType::Absolute,
+            align_self: AlignSelf::Center,
+            justify_self: JustifySelf::Center,
             height: percent(100.0),
             ..Default::default()
         },
@@ -263,6 +272,18 @@ fn description(mut commands: Commands, chosen: Single<&Description, With<Chosen>
 #[derive(Component)]
 #[require(Transform, Visibility)]
 pub struct MinigameRoot;
+
+#[derive(Component)]
+pub struct AvailableAfter(pub usize);
+
+fn available_after(mut commands: Commands, mut available: Query<(Entity, &mut AvailableAfter)>) {
+    for (entity, mut after) in available.iter_mut() {
+        after.0 = after.0.saturating_sub(1);
+        if after.0 == 0 {
+            commands.entity(entity).remove::<AvailableAfter>();
+        }
+    }
+}
 
 fn choose_minigame(
     mut commands: Commands,
@@ -358,7 +379,7 @@ fn clean_variation_sets(
 #[require(Disabled, Transform, Visibility)]
 pub struct Variation;
 
-#[derive(Component)]
+#[derive(Clone, Copy, Component)]
 pub struct OnVariationEnable(pub SystemId<In<Entity>, ()>);
 
 #[derive(Component)]
@@ -417,7 +438,7 @@ fn success(mut commands: Commands, assets: Res<MinigameAssets>) {
     }
 }
 
-fn failure(mut commands: Commands, assets: Res<MinigameAssets>) {
+fn failure(mut commands: Commands, assets: Res<MinigameAssets>, mut failed: Local<usize>) {
     commands.spawn(SamplePlayer::new(assets.timeout.clone()).with_volume(Volume::Linear(1.5)));
 
     if FAST {
@@ -425,16 +446,36 @@ fn failure(mut commands: Commands, assets: Res<MinigameAssets>) {
         return;
     }
 
-    // TODO: art
-    text_transition(
-        &mut commands,
-        // TODO: This will not despawn is all the minigames are exhausted
-        Some(Minigame::Countdown),
-        None,
-        1.0,
-        exit,
-        (Text::new("FAILURE"), TextColor(RED.into())),
-    );
+    *failed += 1;
+    if *failed >= 3 {
+        *failed = 0;
+        // TODO: art
+        text_transition(
+            &mut commands,
+            // TODO: This will not despawn is all the minigames are exhausted
+            Some(Minigame::Countdown),
+            None,
+            1.0,
+            restart,
+            (Text::new("GAME OVER"), TextColor(RED.into())),
+        );
+    } else {
+        // TODO: art
+        text_transition(
+            &mut commands,
+            // TODO: This will not despawn is all the minigames are exhausted
+            Some(Minigame::Countdown),
+            None,
+            1.0,
+            exit,
+            (Text::new("FAILURE"), TextColor(RED.into())),
+        );
+    };
+
+    fn restart(mut commands: Commands) {
+        commands.set_state(Minigame::None);
+        commands.set_state(GameState::Restart);
+    }
     fn exit(mut commands: Commands) {
         commands.set_state(Minigame::Choose);
     }

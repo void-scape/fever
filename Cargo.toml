@@ -34,7 +34,10 @@ tracing = { version = "0.1", features = [
 ] }
 bevy_seedling = { version = "0.7", features = ["hrtf"] }
 bevy_asset_loader = "0.25.0"
-bevy_pretty_text = "0.4.0"
+bevy_pretty_text = "0.4.1"
+
+[target.'cfg(all(target_family = "wasm", any(target_os = "unknown", target_os = "none")))'.dependencies]
+bevy_rand = { version = "0.14", features = ["wasm_js", "chacha20", "wyrand"] }
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

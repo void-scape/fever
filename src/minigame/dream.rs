@@ -1,7 +1,8 @@
 use crate::{
     fractal::lock_camera,
     minigame::{
-        Description, Minigame, MinigameRoot, NotRandom, OnVariationEnable, Variation, VariationSet,
+        AvailableAfter, Description, Minigame, MinigameRoot, NotRandom, OnVariationEnable,
+        Variation, VariationSet,
     },
     state::GameState,
 };
@@ -26,13 +27,13 @@ struct DreamAssets {
     #[asset(path = "sfx/glyph.ogg")]
     glyph: Handle<AudioSample>,
     //
-    #[asset(path = "music/rain.wav")]
+    #[asset(path = "music/rain.ogg")]
     rain: Handle<AudioSample>,
-    #[asset(path = "music/deep.wav")]
+    #[asset(path = "music/deep.ogg")]
     deep: Handle<AudioSample>,
-    #[asset(path = "music/birds.wav")]
+    #[asset(path = "music/birds.ogg")]
     birds: Handle<AudioSample>,
-    #[asset(path = "music/hell.wav")]
+    #[asset(path = "music/hell.ogg")]
     hell: Handle<AudioSample>,
 }
 
@@ -45,8 +46,8 @@ fn init_targets(mut commands: Commands, assets: Res<DreamAssets>) {
             commands.spawn((
                 DespawnOnExit(Minigame::Dream),
                 Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
+                    width: percent(100.0),
+                    height: percent(100.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
@@ -60,6 +61,8 @@ fn init_targets(mut commands: Commands, assets: Res<DreamAssets>) {
 
     commands.spawn((
         MinigameRoot,
+        DespawnOnExit(GameState::Playing),
+        AvailableAfter(6),
         Minigame::Dream,
         Dream,
         Description("LISTEN\n(SPACE/ENTER)"),
@@ -78,14 +81,43 @@ fn init_targets(mut commands: Commands, assets: Res<DreamAssets>) {
                 (
                     Variation,
                     TextSequence,
-                    TextIndex(0),
                     on_start,
                     SamplePlayer::new(assets.rain.clone())
                         .with_volume(Volume::Linear(1.0))
                         .looping(),
                     children![TextSeg(pretty!(
-                        "|2|You|0.25| should not|0.5| be [here](shake)|0.1|..."
+                        "|2|You|0.25| should not|0.5| be [here](shake, red)<0.5>..."
                     ))]
+                ),
+                (
+                    Variation,
+                    TextSequence,
+                    on_start,
+                    SamplePlayer::new(assets.birds.clone())
+                        .with_volume(Volume::Linear(1.0))
+                        .looping(),
+                    children![
+                        TextSeg(pretty!("|2|There is no end.")),
+                        TextSeg(pretty!(
+                            "A [dream](red) with no beginning has no end<0.5>..."
+                        ))
+                    ]
+                ),
+                (
+                    Variation,
+                    TextSequence,
+                    on_start,
+                    SamplePlayer::new(assets.hell.clone())
+                        .with_volume(Volume::Linear(1.0))
+                        .looping(),
+                    children![
+                        TextSeg(pretty!("What do you seek in this [dream](red)?")),
+                        TextSeg(pretty!("This [dream](red) will only take from you.")),
+                        (
+                            TextSeg(pretty!("|1.0|How did you get [here](red)?|0.25|")),
+                            SkipInput
+                        ),
+                    ]
                 )
             ],
         )],
@@ -98,33 +130,56 @@ struct Empty(Timer);
 fn empty(mut commands: Commands, mut empty: Single<&mut Empty>, time: Res<Time>) {
     empty.0.tick(time.delta());
     if empty.0.just_finished() {
-        commands.set_state(Minigame::Failure);
+        commands.set_state(Minigame::Success);
     }
 }
 
 #[derive(Component)]
+#[require(TextIndex)]
 struct TextSequence;
+
+#[derive(Default, Component)]
+struct TextIndex(usize);
 
 #[derive(Component)]
 struct TextSeg(ParsedPrettyText<Text>);
 
-#[derive(Component)]
-struct TextIndex(usize);
-
-fn advance_text(_: On<TypewriterFinished>, mut commands: Commands) {
-    commands.spawn(AwaitInput);
+fn advance_text(
+    finished: On<TypewriterFinished>,
+    mut commands: Commands,
+    skip: Query<(), With<SkipInput>>,
+) {
+    if skip.get(finished.entity).is_ok() {
+        commands.run_system_cached_with(advance_text_with, Entity::PLACEHOLDER);
+    } else {
+        commands.spawn(AwaitInput);
+    }
 }
 
 #[derive(Component)]
 struct AwaitInput;
 
+#[derive(Component)]
+struct SkipInput;
+
 fn await_input(
     mut commands: Commands,
-    await_input: Single<Entity, With<AwaitInput>>,
+    await_input: Query<Entity, With<AwaitInput>>,
+    active: Query<Entity, With<Typewriter>>,
     input: Res<ButtonInput<KeyCode>>,
 ) {
+    if await_input.is_empty() {
+        if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
+            for entity in active.iter() {
+                commands.entity(entity).insert(FinishTypewriter);
+            }
+        }
+        return;
+    }
     if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
-        commands.entity(*await_input).despawn();
+        for entity in await_input.iter() {
+            commands.entity(entity).despawn();
+        }
         commands.run_system_cached_with(advance_text_with, Entity::PLACEHOLDER);
     }
 }
@@ -133,19 +188,19 @@ fn advance_text_with(
     _: In<Entity>,
     mut commands: Commands,
     seq: Single<(&mut TextIndex, Option<&Children>), With<TextSequence>>,
-    text: Query<&TextSeg>,
+    text: Query<(&TextSeg, Has<SkipInput>)>,
 ) {
     let (mut index, seq) = seq.into_inner();
     if let Some(children) = seq
         && let Some(child) = children.iter().nth(index.0)
     {
-        let text = text.get(child).unwrap();
+        let (text, skip_input) = text.get(child).unwrap();
         commands
             .spawn((
                 DespawnOnExit(Minigame::Dream),
                 Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
+                    width: percent(100.0),
+                    height: percent(100.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
@@ -154,13 +209,19 @@ fn advance_text_with(
                 GlobalZIndex(500),
             ))
             .with_children(|s| {
-                s.spawn((
+                let mut entity = s.spawn((
+                    Node {
+                        width: percent(80.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..Default::default()
+                    },
                     text.0.clone().into_bundle(),
                     TextFont::from_font_size(50.0),
-                    TextLayout::new(Justify::Center, LineBreak::NoWrap),
+                    TextLayout::new_with_justify(Justify::Center),
                     Typewriter::new(15.0),
-                ))
-                .observe(
+                ));
+                entity.observe(
                     |revealed: On<Revealed<Char>>,
                      mut commands: Commands,
                      assets: Res<DreamAssets>| {
@@ -173,9 +234,12 @@ fn advance_text_with(
                         }
                     },
                 );
+                if skip_input {
+                    entity.insert(SkipInput);
+                }
             });
         index.0 += 1;
         return;
     }
-    commands.set_state(Minigame::Failure);
+    commands.set_state(Minigame::Success);
 }

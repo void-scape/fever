@@ -7,7 +7,8 @@ pub fn plugin(app: &mut App) {
     #[cfg(feature = "explore")]
     let state = GameState::Explore;
     app.init_state::<GameState>()
-        .add_loading_state(LoadingState::new(GameState::Loading).continue_to_state(state));
+        .add_loading_state(LoadingState::new(GameState::Loading).continue_to_state(state))
+        .add_systems(OnEnter(GameState::Restart), restart);
 }
 
 #[allow(unused)]
@@ -16,6 +17,11 @@ pub enum GameState {
     #[default]
     Loading,
     Playing,
+    Restart,
     #[cfg(feature = "debug")]
     Explore,
+}
+
+fn restart(mut commands: Commands) {
+    commands.set_state(GameState::Playing);
 }

@@ -1130,9 +1130,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_pretty_text"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e7d93eb1ef4e8bd8c1e5f9c64a2769892bed4317b37ef8c6328260e4afeb13e"
+checksum = "7614b44781eb031ae8dcac9668074365a68ca04ec88cac12072d60904f0186eb"
 dependencies = [
  "bevy",
  "bevy_reflect",
@@ -2837,11 +2837,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "139ef39800118c7683f2fd3c98c1b23c09ae076556b435f8e9064ae108aaeeec"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core 0.10.0",
  "wasip2",
  "wasip3",
+ "wasm-bindgen",
 ]
 
 [[package]]

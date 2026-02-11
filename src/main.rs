@@ -29,7 +29,7 @@ fn main() {
                 ..default()
             }),
         bevy_seedling::SeedlingPlugin::default(),
-        bevy_rand::plugin::EntropyPlugin::<WyRand>::with_seed(420u64.to_le_bytes()),
+        bevy_rand::plugin::EntropyPlugin::<WyRand>::with_seed(69u64.to_le_bytes()),
         bevy_pretty_text::prelude::PrettyTextPlugin,
     ))
     .add_plugins((

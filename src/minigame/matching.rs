@@ -24,18 +24,30 @@ pub fn plugin(app: &mut App) {
 
 #[derive(AssetCollection, Resource)]
 struct MatchingAssets {
-    #[asset(path = "images/fractals/pickover.png")]
-    pickover: Handle<Image>,
+    #[asset(path = "images/fractals/bands.png")]
+    bands: Handle<Image>,
+    #[asset(path = "images/fractals/contrast.png")]
+    contrast: Handle<Image>,
+    #[asset(path = "images/fractals/star-ship.png")]
+    star_ship: Handle<Image>,
+    #[asset(path = "images/fractals/glitch.png")]
+    glitch: Handle<Image>,
     //
     #[asset(path = "images/matching/0.png")]
     t0: Handle<Image>,
     #[asset(path = "images/matching/1.png")]
     t1: Handle<Image>,
+    #[asset(path = "images/matching/2.png")]
+    t2: Handle<Image>,
+    #[asset(path = "images/matching/3.png")]
+    t3: Handle<Image>,
     //
-    #[asset(path = "music/bong.wav")]
+    #[asset(path = "music/bong.ogg")]
     bong: Handle<AudioSample>,
-    #[asset(path = "music/rabbit.wav")]
+    #[asset(path = "music/rabbit.ogg")]
     rabbit: Handle<AudioSample>,
+    #[asset(path = "music/melo.ogg")]
+    melo: Handle<AudioSample>,
 }
 
 #[derive(Component)]
@@ -46,33 +58,53 @@ fn init_targets(
     assets: Res<MatchingAssets>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
 ) {
-    // TODO: redo, these are with a flipped y
     let targets = children![
         target(
             &mut commands,
             assets.t0.clone(),
             assets.bong.clone(),
-            assets.pickover.clone(),
+            assets.bands.clone(),
             &mut rng,
             0.1,
-            0.0,
-            -0.67999965,
+            -0.1466666,
+            0.83333266,
         ),
         target(
             &mut commands,
             assets.t1.clone(),
             assets.rabbit.clone(),
-            assets.pickover.clone(),
+            assets.contrast.clone(),
             &mut rng,
             0.1,
-            -1.2599992,
-            0.0,
+            0.35999978,
+            -0.06666669,
+        ),
+        target(
+            &mut commands,
+            assets.t2.clone(),
+            assets.bong.clone(),
+            assets.star_ship.clone(),
+            &mut rng,
+            0.1,
+            -0.746666,
+            -0.21333319,
+        ),
+        target(
+            &mut commands,
+            assets.t3.clone(),
+            assets.melo.clone(),
+            assets.glitch.clone(),
+            &mut rng,
+            0.1,
+            -0.66333276,
+            0.42333305,
         ),
     ];
 
     commands.spawn((
         MinigameRoot,
         Minigame::Matching,
+        DespawnOnExit(GameState::Playing),
         Description("MATCH THE IMAGE\n(WASD)"),
         children![(VariationSet, targets)],
     ));

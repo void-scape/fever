@@ -60,7 +60,7 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<FractalUniform>>,
 ) {
-    let texture = server.load("images/fractals/pickover.png");
+    let texture = server.load("images/fractals/glitch.png");
     commands.spawn((
         Fractal,
         Mesh2d(meshes.add(Rectangle::default())),
