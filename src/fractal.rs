@@ -1,8 +1,10 @@
 use bevy::{
     prelude::*,
-    render::render_resource::{AsBindGroup, ShaderType},
+    render::{
+        render_resource::{AsBindGroup, ShaderType},
+        view::Hdr,
+    },
     sprite_render::{Material2d, Material2dPlugin},
-    time::Stopwatch,
 };
 use bevy_seedling::spatial::SpatialListener3D;
 
@@ -10,25 +12,28 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(Material2dPlugin::<FractalUniform>::default())
         .insert_resource(ClearColor(Color::BLACK))
         .add_systems(Startup, (spawn, camera))
-        .add_systems(Update, (params, move_fractal, stationary));
+        .add_systems(Update, (params, move_fractal));
 
     #[cfg(feature = "debug")]
     app.add_systems(Update, log_params);
 }
 
 #[derive(Component)]
-pub struct Stationary(pub Stopwatch);
+pub struct Stationary;
+
+pub fn lock_camera(mut commands: Commands, camera: Single<Entity, With<Camera>>) {
+    commands.entity(*camera).insert(Stationary);
+}
+
+pub fn unlock_camera(mut commands: Commands, camera: Single<Entity, With<Camera>>) {
+    commands.entity(*camera).remove::<Stationary>();
+}
 
 fn camera(mut commands: Commands) {
-    // commands.trigger(crate::count_down::StartCountDown);
-    commands.spawn((Camera2d, Stationary(Stopwatch::new()), SpatialListener3D));
+    commands.spawn((Camera2d, Hdr, SpatialListener3D));
 }
 
-fn stationary(time: Res<Time>, mut stationary: Single<&mut Stationary>) {
-    stationary.0.tick(time.delta());
-}
-
-#[derive(Clone, Asset, TypePath, AsBindGroup, Component)]
+#[derive(Debug, Clone, Asset, TypePath, AsBindGroup, Component)]
 pub struct FractalUniform {
     #[uniform(0)]
     pub params: Params,
@@ -55,23 +60,15 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<FractalUniform>>,
 ) {
-    let texture = server.load("images/pickover.png");
-    let params = Params {
-        escape_radius: 2.0,
-        iterations: 20.0,
-        cx: 0.0,
-        cy: 0.0,
-        zoom: ZOOM,
-        exponent: 2.0,
-        burning_ship: 0,
-        _pad: 0,
-    };
-
+    let texture = server.load("images/fractals/pickover.png");
     commands.spawn((
         Fractal,
         Mesh2d(meshes.add(Rectangle::default())),
-        MeshMaterial2d(materials.add(FractalUniform { params, texture })),
-        Transform::from_scale(Vec3::splat(MESH_SIZE)),
+        MeshMaterial2d(materials.add(FractalUniform {
+            params: Params::default(),
+            texture,
+        })),
+        Transform::from_scale(Vec3::splat(MESH_SIZE)).with_translation(Vec3::new(0.0, 0.0, -100.0)),
     ));
 }
 
@@ -91,7 +88,7 @@ pub struct Params {
     pub zoom: f32,
     pub exponent: f32,
     pub burning_ship: u32,
-    pub _pad: u32,
+    pub mandelbrot: u32,
 }
 
 impl Default for Params {
@@ -104,7 +101,7 @@ impl Default for Params {
             zoom: ZOOM,
             exponent: 2.0,
             burning_ship: 0,
-            _pad: 0,
+            mandelbrot: 0,
         }
     }
 }
@@ -112,9 +109,8 @@ impl Default for Params {
 fn params(
     input: Res<ButtonInput<KeyCode>>,
     mut assets: ResMut<Assets<FractalUniform>>,
-    camera: Single<(&mut Transform, &mut Stationary), With<Camera2d>>,
+    mut transform: Single<&mut Transform, (With<Camera2d>, Without<Stationary>)>,
 ) {
-    let (mut transform, mut stationary) = camera.into_inner();
     let codes = [KeyCode::KeyW, KeyCode::KeyS, KeyCode::KeyA, KeyCode::KeyD];
     let dir = [
         Vec2::new(0.0, 1.0),
@@ -128,16 +124,16 @@ fn params(
         .map(|i| dir[codes.iter().position(|c| *c == *i).unwrap()]);
 
     for dir in inputs {
-        stationary.0.reset();
         for (_, fractal) in assets.iter_mut() {
             if input.pressed(KeyCode::ShiftLeft) {
                 fractal.params.exponent -= exp_to_w(dir.y / 10.0);
                 transform.translation.z += exp_to_w(dir.y / 100.0);
             } else {
-                fractal.params.cx += dir.x / 100.0;
-                fractal.params.cy += dir.y / 100.0;
-                transform.translation.x += c_to_w(dir.x / 100.0);
-                transform.translation.y += c_to_w(dir.y / 100.0);
+                let factor = 300.0;
+                fractal.params.cx += dir.x / factor;
+                fractal.params.cy += dir.y / factor;
+                transform.translation.x += c_to_w(dir.x / factor);
+                transform.translation.y += c_to_w(dir.y / factor);
             }
         }
     }
@@ -176,7 +172,11 @@ fn log_params(
 // }
 
 pub fn c_to_w(c: f32) -> f32 {
-    (c / ZOOM) * MESH_SIZE / 2.0
+    c / ZOOM * MESH_SIZE / 2.0
+}
+
+pub fn w_to_c(w: f32) -> f32 {
+    w * ZOOM / MESH_SIZE * 2.0
 }
 
 fn exp_to_w(exp: f32) -> f32 {

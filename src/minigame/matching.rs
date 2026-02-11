@@ -1,31 +1,35 @@
 use crate::{
-    fractal::{FractalUniform, Params, Stationary, c_to_w, ctransform},
-    minigame::Minigame,
+    audio::Lpf,
+    fractal::{FractalUniform, Params, ctransform, unlock_camera},
+    minigame::{
+        Description, Minigame, MinigameRoot, OnVariationEnable, StartTimer, Variation, VariationSet,
+    },
     state::GameState,
 };
-use bevy::{ecs::entity_disabling::Disabled, prelude::*};
+use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
+use bevy_rand::{global::GlobalRng, prelude::WyRand};
 use bevy_seedling::prelude::*;
+use rand::Rng;
+use std::f32::consts::TAU;
 
 pub fn plugin(app: &mut App) {
     app.add_loading_state(
         LoadingState::new(GameState::Loading).load_collection::<MatchingAssets>(),
     )
     .add_systems(OnEnter(GameState::Playing), init_targets)
-    // TODO: Fix the flashing in here, somehow the params are not updated after the
-    // count down screen in despawned.
-    .add_systems(OnEnter(Minigame::Matching), assign_target)
+    .add_systems(OnEnter(Minigame::Matching), unlock_camera)
     .add_systems(Update, reach_target.run_if(in_state(Minigame::Matching)));
 }
 
 #[derive(AssetCollection, Resource)]
 struct MatchingAssets {
-    #[asset(path = "images/pickover.png")]
+    #[asset(path = "images/fractals/pickover.png")]
     pickover: Handle<Image>,
     //
-    #[asset(path = "images/targets/0.png")]
+    #[asset(path = "images/matching/0.png")]
     t0: Handle<Image>,
-    #[asset(path = "images/targets/1.png")]
+    #[asset(path = "images/matching/1.png")]
     t1: Handle<Image>,
     //
     #[asset(path = "music/bong.wav")]
@@ -35,93 +39,109 @@ struct MatchingAssets {
 }
 
 #[derive(Component)]
-pub struct TargetPosition;
+struct Target;
 
-#[derive(Component)]
-pub struct TargetImage(Handle<Image>);
-
-fn init_targets(mut commands: Commands, assets: Res<MatchingAssets>) {
-    commands.spawn((
-        markers(),
-        ctransform(0.0, -0.67999965),
-        TargetImage(assets.t0.clone()),
-        SamplePlayer::new(assets.bong.clone())
-            .with_volume(Volume::Linear(0.8))
-            .looping(),
-        FractalUniform {
-            texture: assets.pickover.clone(),
-            params: Params::default(),
-        },
-    ));
-
-    commands.spawn((
-        markers(),
-        ctransform(-1.2599992, 0.0),
-        TargetImage(assets.t1.clone()),
-        SamplePlayer::new(assets.rabbit.clone())
-            .with_volume(Volume::Linear(0.8))
-            .looping(),
-        FractalUniform {
-            texture: assets.pickover.clone(),
-            params: Params::default(),
-        },
-    ));
-
-    fn markers() -> impl Bundle {
-        (Disabled, MusicPool, TargetPosition)
-    }
-}
-
-pub fn assign_target(
+fn init_targets(
     mut commands: Commands,
-    targets: Query<(Entity, &FractalUniform, &TargetImage), (With<Disabled>, With<TargetPosition>)>,
-    mut assets: ResMut<Assets<FractalUniform>>,
-    mut camera: Single<&mut Transform, With<Camera>>,
+    assets: Res<MatchingAssets>,
+    mut rng: Single<&mut WyRand, With<GlobalRng>>,
 ) {
-    let (entity, uniform, image) = targets.iter().next().unwrap();
-    commands
-        .entity(entity)
-        .remove::<Disabled>()
-        .insert(image_bundle(image.0.clone()));
-    camera.translation.x = c_to_w(uniform.params.cx);
-    camera.translation.y = c_to_w(uniform.params.cy);
-    for (_, fractal) in assets.iter_mut() {
-        fractal.texture = uniform.texture.clone();
-        fractal.params = uniform.params;
-    }
+    // TODO: redo, these are with a flipped y
+    let targets = children![
+        target(
+            &mut commands,
+            assets.t0.clone(),
+            assets.bong.clone(),
+            assets.pickover.clone(),
+            &mut rng,
+            0.1,
+            0.0,
+            -0.67999965,
+        ),
+        target(
+            &mut commands,
+            assets.t1.clone(),
+            assets.rabbit.clone(),
+            assets.pickover.clone(),
+            &mut rng,
+            0.1,
+            -1.2599992,
+            0.0,
+        ),
+    ];
 
-    // Doesn't work with disabled entities, yet another example of `Disabled`
-    // causing unexpected behavior.
-    fn image_bundle(image: Handle<Image>) -> impl Bundle {
+    commands.spawn((
+        MinigameRoot,
+        Minigame::Matching,
+        Description("MATCH THE IMAGE\n(WASD)"),
+        children![(VariationSet, targets)],
+    ));
+
+    fn target(
+        commands: &mut Commands,
+        image: Handle<Image>,
+        song: Handle<AudioSample>,
+        texture: Handle<Image>,
+        rng: &mut impl Rng,
+        r: f32,
+        cx: f32,
+        cy: f32,
+    ) -> impl Bundle {
+        let enable = OnVariationEnable(commands.register_system(
+            move |_: In<Entity>, mut commands: Commands| {
+                commands.spawn((
+                    DespawnOnExit(Minigame::Matching),
+                    ImageNode {
+                        image: image.clone(),
+                        ..default()
+                    },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(20.0),
+                        top: Val::Px(20.0),
+                        width: Val::Percent(35.0),
+                        ..default()
+                    },
+                ));
+            },
+        ));
+        let dc = Vec2::from_angle(rng.random_range(0.0..TAU)) * r;
         (
-            ImageNode { image, ..default() },
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(20.0),
-                top: Val::Px(20.0),
-                width: Val::Percent(35.0),
-                ..default()
+            Variation,
+            StartTimer(8.0),
+            enable,
+            Target,
+            ctransform(cx, cy),
+            // no lpf on music pool :(
+            // MusicPool,
+            SamplePlayer::new(song)
+                .with_volume(Volume::Linear(0.8))
+                .looping(),
+            sample_effects![LowPassNode {
+                frequency: 20_000.0
+            }],
+            Lpf(20_000.0),
+            FractalUniform {
+                texture,
+                params: Params {
+                    cx: dc.x + cx,
+                    cy: dc.y + cy,
+                    ..Default::default()
+                },
             },
         )
     }
 }
 
-pub fn reach_target(
+fn reach_target(
     mut commands: Commands,
-    target: Single<(Entity, &Transform), With<TargetPosition>>,
-    camera: Single<(&Transform, &Stationary), With<Camera>>,
+    target: Single<(&Transform, &mut Lpf), With<Target>>,
+    camera: Single<&Transform, With<Camera>>,
 ) {
-    let (camera_transform, stationary) = camera.into_inner();
-    if stationary.0.elapsed_secs() < 1.0 {
-        return;
-    }
-
-    let (entity, transform) = target.into_inner();
-    let dist = camera_transform
-        .translation
-        .distance_squared(transform.translation);
-    if dist < 500.0 {
-        commands.entity(entity).despawn();
-        commands.set_state(Minigame::None);
+    let (transform, mut lpf) = target.into_inner();
+    let dist = camera.translation.distance(transform.translation);
+    *lpf = Lpf::distance(dist, 32.0);
+    if dist < 8.0 {
+        commands.set_state(Minigame::Success);
     }
 }

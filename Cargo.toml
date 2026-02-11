@@ -21,8 +21,10 @@ bevy = { version = "0.18", default-features = false, features = [
 	"ui_api",
 	"ui_bevy_render",
 	"jpeg",
+	"bevy_gizmos",
 ] }
 rand = "0.9"
+bevy_rand = { version = "0.14", features = ["chacha20", "wyrand"] }
 # Compile out low-severity logs to improve performance.
 # Remove these features if you want to profile your game with tracy.
 # (see <https://github.com/bevyengine/bevy/blob/main/docs/profiling.md#tracy-profiler>)
@@ -32,6 +34,7 @@ tracing = { version = "0.1", features = [
 ] }
 bevy_seedling = { version = "0.7", features = ["hrtf"] }
 bevy_asset_loader = "0.25.0"
+bevy_pretty_text = "0.4.0"
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
