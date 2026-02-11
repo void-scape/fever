@@ -4,12 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["debug"]
-debug = [
-	"bevy/dynamic_linking",
-	"bevy/debug",
-	"bevy/track_location",
-	"bevy/bevy_dev_tools",
+# Default to a native dev build.
+default = ["dev_native"]
+dev = [
+    # Improve compile times for dev builds by linking Bevy as a dynamic library.
+    "bevy/dynamic_linking",
+    "bevy/bevy_dev_tools",
+    "bevy/bevy_ui_debug",
+    # Improve error messages coming from Bevy
+    "bevy/track_location",
+]
+dev_native = [
+    "dev",
+    # Enable asset hot reloading for native dev builds.
+    "bevy/file_watcher",
+    # Enable embedded asset hot reloading for native dev builds.
+    "bevy/embedded_watcher",
 ]
 explore = []
 
@@ -73,7 +83,7 @@ default-features = false
 default-features = false
 
 [package.metadata.bevy_cli.web.dev]
-features = ["debug"]
+features = ["dev"]
 
 [lints.rust]
 # Mark `bevy_lint` as a valid `cfg`, as it is set when the Bevy linter runs.

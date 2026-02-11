@@ -18,7 +18,7 @@ pub enum GameState {
     Loading,
     Playing,
     Restart,
-    #[cfg(feature = "debug")]
+    #[cfg(feature = "dev")]
     Explore,
 }
 

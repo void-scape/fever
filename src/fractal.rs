@@ -14,7 +14,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, (spawn, camera))
         .add_systems(Update, (params, move_fractal));
 
-    #[cfg(feature = "debug")]
+    #[cfg(feature = "dev")]
     app.add_systems(Update, log_params);
 }
 
@@ -139,7 +139,7 @@ fn params(
     }
 }
 
-#[cfg(feature = "debug")]
+#[cfg(feature = "dev")]
 fn log_params(
     mut commands: Commands,
     input: Res<ButtonInput<KeyCode>>,

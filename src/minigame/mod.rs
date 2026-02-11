@@ -15,14 +15,14 @@ use bevy_seedling::{
 };
 use rand::seq::IteratorRandom;
 
-#[cfg(feature = "debug")]
+#[cfg(feature = "dev")]
 const FAST: bool = false;
-#[cfg(not(feature = "debug"))]
+#[cfg(not(feature = "dev"))]
 const FAST: bool = false;
 
-#[cfg(feature = "debug")]
+#[cfg(feature = "dev")]
 const RANDOM: bool = true;
-#[cfg(not(feature = "debug"))]
+#[cfg(not(feature = "dev"))]
 const RANDOM: bool = true;
 
 mod dream;
