@@ -21,8 +21,6 @@ pub fn plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<IntroAssets>())
         .add_sub_state::<Intro>()
         .add_systems(OnEnter(Intro::Fade), fade)
-        .add_systems(OnEnter(Intro::MoveControls), move_controls)
-        .add_systems(OnEnter(Intro::Move), move_state)
         .add_systems(OnEnter(Intro::MouseControls), mouse_controls)
         .add_systems(OnEnter(Intro::Mouse), mouse)
         .add_systems(
@@ -31,6 +29,8 @@ pub fn plugin(app: &mut App) {
                 .before(AnimationSystems::Interpolate)
                 .run_if(in_state(Intro::Mouse)),
         )
+        .add_systems(OnEnter(Intro::MoveControls), move_controls)
+        .add_systems(OnEnter(Intro::Move), move_state)
         .add_systems(OnEnter(Intro::FlavorText), flavor_text);
 }
 
@@ -38,6 +38,8 @@ pub fn plugin(app: &mut App) {
 struct IntroAssets {
     #[asset(path = "music/rain.ogg")]
     rain: Handle<AudioSample>,
+    #[asset(path = "sfx/control.ogg")]
+    control: Handle<AudioSample>,
     #[asset(path = "images/fractals/odd-julia.png")]
     odd_julia: Handle<Image>,
     #[asset(path = "images/fractals/pl-julia.png")]
@@ -84,7 +86,7 @@ fn fade(mut commands: Commands, fractal: Single<Entity, With<Fractal>>, assets: 
                 Easing::SineInOut
             ),
             (
-                Duration(dur),
+                Duration(8.0),
                 Keyframe(Lpf(10000.0)),
                 Keyframe(PlaybackSpeed(0.5)),
                 Easing::SineInOut
@@ -113,7 +115,7 @@ fn fade(mut commands: Commands, fractal: Single<Entity, With<Fractal>>, assets: 
         DespawnFinished,
         animations![
             (Duration(8.0), Keyframe(Opacity(1.0)), Easing::SineInOut),
-            (Duration(dur), Keyframe(Iterations(20.0)), Easing::SineInOut),
+            (Duration(8.0), Keyframe(Iterations(20.0)), Easing::SineInOut),
             (
                 Duration(dur),
                 Delta(CPlane(Vec2::new(0.1, 0.0))),
@@ -248,7 +250,16 @@ fn move_state(
     commands.spawn((
         DespawnFinished,
         animations![
-            Duration(5.0),
+            (
+                Duration(5.0),
+                system(
+                    |mut speed: Single<&mut PlaybackSpeed, With<Music>>,
+                     cplane: Single<&CPlane, With<Fractal>>| {
+                        let dist = cplane.0.distance(Vec2::new(-0.66333276, 0.42333305 - 0.25));
+                        speed.0 = 0.2 + dist as f64 / 5.0;
+                    }
+                )
+            ),
             parallel![
                 (
                     AnimationTarget(*sens),
@@ -327,7 +338,7 @@ fn flavor_text(mut commands: Commands) {
             ),
             await_input(pretty!(
                 "|1|<0.9>I move my hand over you|0.25|<1.15> but it<1> does not block your \
-                <0.8>[bleeding glow](glitch, red).|1| You must be|0.25|<1.25> imaginary."
+                <0.8>[bleeding glow](glitch, red).|1| You must be|0.25|<0.75> imaginary."
             )),
             set_state(GameState::Playing),
         ],
@@ -349,11 +360,18 @@ fn controls_bundle(
             ..Default::default()
         },
         ImageColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
-        UiTranslationPx(Vec2::new(0.0, -50.0)),
+        UiTranslationPx(Vec2::new(0.0, -20.0)),
         //
         AnimationTarget::entity(),
         DespawnFinished,
         animations![
+            system(|mut commands: Commands, assets: Res<IntroAssets>| {
+                commands.spawn((
+                    SamplePlayer::new(assets.control.clone()).with_volume(Volume::Linear(0.6)),
+                    PlaybackSettings::default().with_speed(0.5),
+                    sample_effects![FreeverbNode::default()],
+                ));
+            }),
             (
                 Duration(2.0),
                 Keyframe(ImageColor(Color::srgba(1.0, 1.0, 1.0, 1.0))),
@@ -366,12 +384,12 @@ fn controls_bundle(
                     AnimationTarget(entity),
                     animations![
                         (
-                            Duration(0.8),
+                            Duration(1.5),
                             Keyframe(UiTranslationPx(Vec2::new(0.0, -10.0))),
                             Easing::SineInOut
                         ),
                         (
-                            Duration(0.8),
+                            Duration(1.5),
                             Keyframe(UiTranslationPx(Vec2::new(0.0, 0.0))),
                             Easing::SineInOut
                         ),
