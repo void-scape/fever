@@ -9,6 +9,8 @@ struct Fractal {
 	exponent: f32,
 	burning_ship: u32,
 	mandelbrot: u32,
+	opacity: f32,
+	_pad: vec3<f32>,
 }
 
 @group(2) @binding(0) var<uniform> args: Fractal;
@@ -55,11 +57,23 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 		}
 	}
 
-	let fx = (z.x / aspect + 1.0) / 2.0;
-	let fy = (z.y + 1.0) / 2.0;
+	var nz = z;
+	if fract(args.iterations) != 0.0 {
+		if dot(z, z) <= args.escape_radius * args.escape_radius {
+			if args.burning_ship == 1u {
+				nz = cpow(vec2(abs(z.x), abs(z.y)), args.exponent) + c;
+			} else {
+				nz = cpow(z, args.exponent) + c;
+			}
+		}
+	}
+
+	let fz = mix(z, nz, fract(args.iterations));
+	let fx = (fz.x / aspect + 1.0) / 2.0;
+	let fy = (fz.y + 1.0) / 2.0;
 	if fx >= 0.0 && fx < 1.0 && fy >= 0.0 && fy < 1.0 {
-		return textureSample(texture, texture_sampler, vec2(fx, fy));
+		return vec4(textureSample(texture, texture_sampler, vec2(fx, fy)).rgb, args.opacity);
 	} else {
-	 	return vec4(0.0, 0.0, 0.0, 1.0);
+	 	return vec4(0.0, 0.0, 0.0, args.opacity);
 	}
 }

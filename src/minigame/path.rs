@@ -1,6 +1,6 @@
 use crate::{
     audio::Lpf,
-    fractal::{FractalUniform, Params, c_to_w, ctransform, lock_camera, w_to_c},
+    fractal::{FractalUniform, Params, c_to_w, cmul, ctransform, lock_camera, w_to_c},
     minigame::{Description, Minigame, MinigameRoot, StartTimer, Variation, VariationSet},
     state::GameState,
 };
@@ -52,14 +52,7 @@ struct TargetRoot;
 #[derive(Component)]
 struct Target(f32);
 
-fn init_targets(
-    mut commands: Commands,
-    mut config_store: ResMut<GizmoConfigStore>,
-    assets: Res<PathAssets>,
-) {
-    let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
-    config.line.width = 5.0;
-
+fn init_targets(mut commands: Commands, assets: Res<PathAssets>) {
     commands.spawn((
         MinigameRoot,
         DespawnOnExit(GameState::Playing),
@@ -73,10 +66,26 @@ fn init_targets(
                     assets.god.clone(),
                     assets.zap.clone(),
                     children![
-                        (Disabled, Target(10.0), ctransform(0.12925337, 0.7643622)),
-                        (Disabled, Target(10.0), ctransform(-0.43770975, 0.9620131)),
-                        (Disabled, Target(10.0), ctransform(-0.60180664, -0.07361984)),
-                        (Disabled, Target(10.0), ctransform(0.48981094, 0.8597144)),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.12925337, 0.7643622, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.43770975, 0.9620131, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.60180664, -0.07361984, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.48981094, 0.8597144, 1.5)
+                        ),
                     ],
                 ),
                 target(
@@ -84,11 +93,31 @@ fn init_targets(
                     assets.star_ship.clone(),
                     assets.power_life.clone(),
                     children![
-                        (Disabled, Target(10.0), ctransform(0.39360046, 0.22105403)),
-                        (Disabled, Target(10.0), ctransform(0.50511175, 0.39056396)),
-                        (Disabled, Target(10.0), ctransform(0.48820877, 0.6109084)),
-                        (Disabled, Target(10.0), ctransform(0.26229095, 0.81796634)),
-                        (Disabled, Target(10.0), ctransform(-0.21299359, 0.64798725)),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.39360046, 0.22105403, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.50511175, 0.39056396, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.48820877, 0.6109084, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.26229095, 0.81796634, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.21299359, 0.64798725, 1.5)
+                        ),
                     ],
                 ),
                 target(
@@ -96,11 +125,31 @@ fn init_targets(
                     assets.contrast.clone(),
                     assets.zap.clone(),
                     children![
-                        (Disabled, Target(10.0), ctransform(-0.3643189, -0.6188507)),
-                        (Disabled, Target(10.0), ctransform(-0.5354081, -0.6015929)),
-                        (Disabled, Target(10.0), ctransform(-0.16873938, -0.64779276)),
-                        (Disabled, Target(10.0), ctransform(-0.60802084, -0.17068857)),
-                        (Disabled, Target(10.0), ctransform(-0.4474144, 0.020050056)),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.3643189, -0.6188507, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.5354081, -0.6015929, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.16873938, -0.64779276, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.60802084, -0.17068857, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.4474144, 0.020050056, 1.5)
+                        ),
                     ],
                 ),
                 target(
@@ -108,10 +157,26 @@ fn init_targets(
                     assets.star_ship.clone(),
                     assets.power_life.clone(),
                     children![
-                        (Disabled, Target(10.0), ctransform(0.074550614, -0.54670715)),
-                        (Disabled, Target(10.0), ctransform(-0.21527101, -0.62417215)),
-                        (Disabled, Target(10.0), ctransform(0.073577866, -0.39602274)),
-                        (Disabled, Target(10.0), ctransform(-0.2700196, -0.27401727)),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.074550614, -0.54670715, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.21527101, -0.62417215, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(0.073577866, -0.39602274, 1.5)
+                        ),
+                        (
+                            Disabled,
+                            Target(10.0),
+                            ctransform(-0.2700196, -0.27401727, 1.5)
+                        ),
                     ],
                 ),
             ]
@@ -136,6 +201,7 @@ fn init_targets(
                     cx: -0.5,
                     mandelbrot: 1,
                     exponent: 2.0,
+                    zoom: 1.5,
                     ..Default::default()
                 },
             },
@@ -183,7 +249,7 @@ fn intersect_targets(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate())
     {
-        let mut c = Vec2::new(w_to_c(w.x), w_to_c(w.y));
+        let mut c = Vec2::new(w_to_c(w.x, 1.5), w_to_c(w.y, 1.5));
 
         if DEBUGGER {
             if input.pressed(KeyCode::ShiftLeft) {
@@ -211,8 +277,8 @@ fn intersect_targets(
 
         for points in path.windows(2) {
             gizmos.line_2d(
-                Vec2::new(c_to_w(points[0].x), c_to_w(points[0].y)),
-                Vec2::new(c_to_w(points[1].x), c_to_w(points[1].y)),
+                Vec2::new(c_to_w(points[0].x, 1.5), c_to_w(points[0].y, 1.5)),
+                Vec2::new(c_to_w(points[1].x, 1.5), c_to_w(points[1].y, 1.5)),
                 Color::WHITE,
             );
         }
@@ -221,7 +287,7 @@ fn intersect_targets(
         let mut unhov = false;
         'outer: for (entity, target, transform, hovered) in targets.iter() {
             for point in path.iter() {
-                let dist = Vec2::new(c_to_w(point.x), c_to_w(point.y))
+                let dist = Vec2::new(c_to_w(point.x, 1.5), c_to_w(point.y, 1.5))
                     .distance_squared(transform.translation.xy());
                 if dist < target.0 * target.0 {
                     if hovered {
@@ -254,10 +320,6 @@ fn intersect_targets(
             len - targets.iter().filter(|(_, _, _, h)| *h).count() as f32,
             len,
         );
-    }
-
-    fn cmul(a: Vec2, b: Vec2) -> Vec2 {
-        Vec2::new(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
     }
 }
 

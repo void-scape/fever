@@ -143,7 +143,7 @@ fn init_targets(
             StartTimer(8.0),
             enable,
             Target,
-            ctransform(cx, cy),
+            ctransform(cx, cy, 1.5),
             // no lpf on music pool :(
             // MusicPool,
             SamplePlayer::new(song)
@@ -158,6 +158,7 @@ fn init_targets(
                 params: Params {
                     cx: dc.x + cx,
                     cy: dc.y + cy,
+                    zoom: 1.5,
                     ..Default::default()
                 },
             },

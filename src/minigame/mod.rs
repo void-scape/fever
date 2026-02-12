@@ -1,5 +1,6 @@
 use crate::{
-    fractal::{FractalUniform, c_to_w},
+    animation::AnimationSystems,
+    fractal::{Fractal, FractalUniform, Zoom, c_to_w},
     state::GameState,
 };
 use bevy::{
@@ -13,6 +14,7 @@ use bevy_seedling::{
     prelude::Volume,
     sample::{AudioSample, SamplePlayer},
 };
+use fever_macros::Lerp;
 use rand::seq::IteratorRandom;
 
 #[cfg(feature = "dev")]
@@ -55,6 +57,7 @@ pub fn plugin(app: &mut App) {
         (
             tick_timer,
             tick_text_transition,
+            (image_color, ui_translation).after(AnimationSystems::Interpolate),
             count_down.run_if(in_state(Minigame::Countdown)),
             (clean_variation_sets, clean_minigame_roots).chain(),
         ),
@@ -62,11 +65,19 @@ pub fn plugin(app: &mut App) {
 }
 
 #[derive(AssetCollection, Resource)]
-struct MinigameAssets {
+pub struct MinigameAssets {
+    #[asset(path = "third-party/wasd.png")]
+    pub wasd: Handle<Image>,
+    #[asset(path = "third-party/mouse.png")]
+    pub mouse: Handle<Image>,
+    //
     #[asset(path = "sfx/timeout.ogg")]
     timeout: Handle<AudioSample>,
     #[asset(path = "sfx/succeed.ogg")]
     succeed: Handle<AudioSample>,
+    //
+    #[asset(path = "sfx/glyph.ogg")]
+    pub glyph: Handle<AudioSample>,
     //
     #[asset(path = "sfx/boom.ogg")]
     boom: Handle<AudioSample>,
@@ -78,6 +89,26 @@ struct MinigameAssets {
     two: Handle<Image>,
     #[asset(path = "images/count-down/2.png")]
     three: Handle<Image>,
+}
+
+#[derive(Default, Clone, Copy, Component, Lerp, Deref, DerefMut)]
+pub struct ImageColor(pub Color);
+
+fn image_color(mut nodes: Query<(&mut ImageNode, &ImageColor), Changed<ImageColor>>) {
+    for (mut node, color) in nodes.iter_mut() {
+        node.color = color.0;
+    }
+}
+
+#[derive(Default, Clone, Copy, Component, Lerp, Deref, DerefMut)]
+pub struct UiTranslationPx(pub Vec2);
+
+fn ui_translation(
+    mut nodes: Query<(&mut UiTransform, &UiTranslationPx), Changed<UiTranslationPx>>,
+) {
+    for (mut node, t) in nodes.iter_mut() {
+        node.translation = Val2::px(t.x, t.y);
+    }
 }
 
 #[derive(Component)]
@@ -302,6 +333,7 @@ fn choose_minigame(
         ),
         (With<Variation>, Allow<Disabled>),
     >,
+    zoom: Single<&Zoom, With<Fractal>>,
 ) {
     let (entity, children, state) = root.into_inner();
     commands.entity(entity).remove::<Chosen>();
@@ -325,8 +357,8 @@ fn choose_minigame(
             camera.translation.x = 0.0;
             camera.translation.y = 0.0;
         } else {
-            camera.translation.x = c_to_w(uniform.params.cx);
-            camera.translation.y = c_to_w(uniform.params.cy);
+            camera.translation.x = c_to_w(uniform.params.cx, zoom.0);
+            camera.translation.y = c_to_w(uniform.params.cy, zoom.0);
         }
         for (_, fractal) in uniforms.iter_mut() {
             fractal.texture = uniform.texture.clone();

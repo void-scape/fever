@@ -3,23 +3,27 @@ name = "fever"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+resolver = "3"
+members = ["fever-macros"]
+
 [features]
 # Default to a native dev build.
 default = ["dev_native"]
 dev = [
-    # Improve compile times for dev builds by linking Bevy as a dynamic library.
-    "bevy/dynamic_linking",
-    "bevy/bevy_dev_tools",
-    "bevy/bevy_ui_debug",
-    # Improve error messages coming from Bevy
-    "bevy/track_location",
+	# Improve compile times for dev builds by linking Bevy as a dynamic library.
+	"bevy/dynamic_linking",
+	"bevy/bevy_dev_tools",
+	"bevy/bevy_ui_debug",
+	# Improve error messages coming from Bevy
+	"bevy/track_location",
 ]
 dev_native = [
-    "dev",
-    # Enable asset hot reloading for native dev builds.
-    "bevy/file_watcher",
-    # Enable embedded asset hot reloading for native dev builds.
-    "bevy/embedded_watcher",
+	"dev",
+	# Enable asset hot reloading for native dev builds.
+	"bevy/file_watcher",
+	# Enable embedded asset hot reloading for native dev builds.
+	"bevy/embedded_watcher",
 ]
 explore = []
 
@@ -45,6 +49,7 @@ tracing = { version = "0.1", features = [
 bevy_seedling = { version = "0.7", features = ["hrtf"] }
 bevy_asset_loader = "0.25.0"
 bevy_pretty_text = "0.4.1"
+fever_macros = { path = "fever-macros" }
 
 [target.'cfg(all(target_family = "wasm", any(target_os = "unknown", target_os = "none")))'.dependencies]
 bevy_rand = { version = "0.14", features = ["wasm_js", "chacha20", "wyrand"] }

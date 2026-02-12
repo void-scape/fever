@@ -3,10 +3,14 @@
 use bevy::{asset::AssetMetaCheck, prelude::*};
 use bevy_rand::prelude::WyRand;
 
+#[allow(unused)]
+mod animation;
 mod audio;
 mod fractal;
+mod intro;
 mod minigame;
 mod state;
+mod text;
 
 fn main() {
     let mut app = App::new();
@@ -37,7 +41,11 @@ fn main() {
         minigame::plugin,
         fractal::plugin,
         audio::plugin,
-    ));
+        intro::plugin,
+        animation::plugin,
+        text::plugin,
+    ))
+    .add_systems(Startup, gizmos_line_width);
 
     #[cfg(debug_assertions)]
     app
@@ -56,4 +64,9 @@ fn close_on_escape(mut writer: MessageWriter<AppExit>, input: Res<ButtonInput<Ke
     if input.just_pressed(KeyCode::Escape) {
         writer.write(AppExit::Success);
     }
+}
+
+fn gizmos_line_width(mut config_store: ResMut<GizmoConfigStore>) {
+    let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
+    config.line.width = 5.0;
 }
