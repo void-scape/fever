@@ -1,7 +1,8 @@
 use crate::{
     animation::AnimationSystems,
-    fractal::{CPlane, Fractal, Zoom, c_to_w},
+    fractal::{CPlane, Fractal, FractalMesh, JuliaCoordinates},
     state::GameState,
+    transition::Transition,
 };
 use bevy::{prelude::*, render::view::Hdr};
 use fever_macros::Lerp;
@@ -17,7 +18,12 @@ pub fn plugin(app: &mut App) {
 }
 
 fn spawn(mut commands: Commands) {
-    commands.spawn((Camera2d, MovementSensitivity::default(), Hdr));
+    commands.spawn((
+        Camera2d,
+        MovementSensitivity::default(),
+        Hdr,
+        Transition::default(),
+    ));
 }
 
 #[derive(Clone, Copy, Component, Lerp, Deref, DerefMut)]
@@ -52,8 +58,12 @@ pub fn unforce_camera_origin(mut commands: Commands, camera: Single<Entity, With
 }
 
 fn move_camera(
-    transform: Single<(&mut Transform, Has<ForceOrigin>, Has<Stationary>), With<Camera2d>>,
-    fractal: Single<(&CPlane, &Zoom), With<Fractal>>,
+    transform: Single<
+        (&mut Transform, Has<ForceOrigin>, Has<Stationary>),
+        (With<Camera2d>, Without<FractalMesh>),
+    >,
+    cplane: Single<&CPlane, With<Fractal>>,
+    coords: JuliaCoordinates,
 ) {
     let (mut transform, force_origin, stationary) = transform.into_inner();
     if force_origin {
@@ -63,7 +73,7 @@ fn move_camera(
     if stationary {
         return;
     }
-    let (cplane, zoom) = fractal.into_inner();
-    transform.translation.x = c_to_w(cplane.x, zoom.0);
-    transform.translation.y = c_to_w(cplane.y, zoom.0);
+    let w = coords.world2(cplane.0);
+    transform.translation.x = w.x;
+    transform.translation.y = w.y;
 }

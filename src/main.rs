@@ -12,6 +12,7 @@ mod intro;
 mod minigame;
 mod state;
 mod text;
+mod transition;
 
 fn main() {
     let mut app = App::new();
@@ -46,6 +47,7 @@ fn main() {
         animation::plugin,
         text::plugin,
         camera::plugin,
+        transition::plugin,
     ))
     .add_systems(Startup, gizmos_line_width);
 

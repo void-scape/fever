@@ -1,10 +1,14 @@
 use crate::{
-    audio::Lpf,
-    camera::unlock_camera,
-    fractal::{CPlane, Fractal, FractalTexture, ctransform},
+    animation::*,
+    animations,
+    audio::{Lpf, PlaybackSpeed},
+    camera::{MovementSensitivity, unlock_camera},
+    fractal::{CPlane, Fractal, FractalTexture, JuliaCoordinates},
     minigame::{
-        Description, Minigame, MinigameRoot, OnVariationEnable, StartTimer, Variation, VariationSet,
+        Description, ImageColor, Minigame, MinigameRoot, OnVariationEnable, StartTimer, Variation,
+        VariationSet,
     },
+    parallel,
     state::GameState,
 };
 use bevy::prelude::*;
@@ -58,10 +62,12 @@ fn init_targets(
     mut commands: Commands,
     assets: Res<MatchingAssets>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
+    coords: JuliaCoordinates,
 ) {
     let targets = children![
         target(
             &mut commands,
+            &coords,
             assets.t0.clone(),
             assets.bong.clone(),
             assets.bands.clone(),
@@ -72,6 +78,7 @@ fn init_targets(
         ),
         target(
             &mut commands,
+            &coords,
             assets.t1.clone(),
             assets.rabbit.clone(),
             assets.contrast.clone(),
@@ -82,6 +89,7 @@ fn init_targets(
         ),
         target(
             &mut commands,
+            &coords,
             assets.t2.clone(),
             assets.bong.clone(),
             assets.star_ship.clone(),
@@ -92,6 +100,7 @@ fn init_targets(
         ),
         target(
             &mut commands,
+            &coords,
             assets.t3.clone(),
             assets.melo.clone(),
             assets.glitch.clone(),
@@ -106,12 +115,13 @@ fn init_targets(
         MinigameRoot,
         Minigame::Matching,
         DespawnOnExit(GameState::Playing),
-        Description("MATCH THE IMAGE\n(WASD)"),
+        Description::Wasd,
         children![(VariationSet, targets)],
     ));
 
     fn target(
         commands: &mut Commands,
+        coords: &JuliaCoordinates,
         image: Handle<Image>,
         song: Handle<AudioSample>,
         texture: Handle<Image>,
@@ -122,14 +132,18 @@ fn init_targets(
     ) -> impl Bundle {
         let dc = Vec2::from_angle(rng.random_range(0.0..TAU)) * r;
         let enable = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>, mut commands: Commands, fractal: Single<Entity, With<Fractal>>| {
+            move |_: In<Entity>,
+                  mut commands: Commands,
+                  fractal: Single<Entity, With<Fractal>>,
+                  camera: Single<Entity, With<Camera>>,
+                  music: Single<Entity, With<Music>>| {
                 commands.entity(*fractal).insert((
                     FractalTexture(texture.clone()),
                     CPlane(Vec2::new(cx, cy) + dc),
                 ));
 
                 commands.spawn((
-                    DespawnOnExit(Minigame::Matching),
+                    DespawnOnExit(Minigame::EnterWipe),
                     ImageNode {
                         image: image.clone(),
                         ..default()
@@ -141,6 +155,38 @@ fn init_targets(
                         width: Val::Percent(35.0),
                         ..default()
                     },
+                    ImageColor(Color::WHITE.with_alpha(0.0)),
+                    AnimationTarget::entity(),
+                    animations![
+                        Duration(1.0),
+                        (
+                            Duration(1.25),
+                            Keyframe(ImageColor(Color::WHITE)),
+                            Easing::SineInOut
+                        ),
+                        blocking_system(|state: Res<State<Minigame>>| {
+                            *state.get() != Minigame::Matching
+                        }),
+                        parallel![
+                            (
+                                Duration(0.3),
+                                Keyframe(ImageColor(Color::WHITE.with_alpha(0.0))),
+                                Easing::SineInOut
+                            ),
+                            (
+                                AnimationTarget(*camera),
+                                Duration(0.2),
+                                Keyframe(MovementSensitivity(0.0)),
+                                Easing::SineInOut
+                            ),
+                            (
+                                AnimationTarget(*music),
+                                Duration(0.2),
+                                Keyframe(PlaybackSpeed(0.0)),
+                                Easing::SineInOut
+                            )
+                        ],
+                    ],
                 ));
             },
         ));
@@ -150,9 +196,11 @@ fn init_targets(
             StartTimer(8.0),
             enable,
             Target,
-            ctransform(cx, cy, 1.5),
+            Music,
+            coords.transform(cx, cy),
             // no lpf on music pool :(
             // MusicPool,
+            PlaybackSpeed(1.0),
             SamplePlayer::new(song)
                 .with_volume(Volume::Linear(0.8))
                 .looping(),
@@ -163,6 +211,9 @@ fn init_targets(
         )
     }
 }
+
+#[derive(Component)]
+struct Music;
 
 fn reach_target(
     mut commands: Commands,

@@ -1,27 +1,21 @@
 use crate::{
-    animation::AnimationSystems,
+    animation::*,
+    animations,
     camera::MovementSensitivity,
     fractal::{Fractal, ResetFractal},
     state::GameState,
+    transition::{Transition, TransitionProgress},
 };
 use bevy::{
-    color::palettes::{css::RED, tailwind::GREEN_800},
+    color::palettes::css::RED,
     ecs::{entity_disabling::Disabled, system::SystemId},
     prelude::*,
 };
 use bevy_asset_loader::prelude::*;
 use bevy_rand::{global::GlobalRng, prelude::WyRand};
-use bevy_seedling::{
-    prelude::Volume,
-    sample::{AudioSample, SamplePlayer},
-};
+use bevy_seedling::prelude::*;
 use fever_macros::Lerp;
 use rand::seq::IteratorRandom;
-
-#[cfg(feature = "dev")]
-const FAST: bool = false;
-#[cfg(not(feature = "dev"))]
-const FAST: bool = false;
 
 #[cfg(feature = "dev")]
 const RANDOM: bool = true;
@@ -48,18 +42,15 @@ pub fn plugin(app: &mut App) {
     .add_observer(end_timer)
     .add_systems(OnEnter(Minigame::None), start)
     .add_systems(OnEnter(Minigame::Choose), choose)
+    .add_systems(OnEnter(Minigame::EnterWipe), wipe)
     .add_systems(OnExit(Minigame::Choose), available_after)
-    .add_systems(OnEnter(Minigame::Countdown), start_count_down)
-    .add_systems(OnEnter(Minigame::Description), description)
     .add_systems(OnEnter(Minigame::Success), success)
     .add_systems(OnEnter(Minigame::Failure), failure)
     .add_systems(
         Update,
         (
             tick_timer,
-            tick_text_transition,
             (image_color, ui_translation).after(AnimationSystems::Interpolate),
-            count_down.run_if(in_state(Minigame::Countdown)),
             (clean_variation_sets, clean_minigame_roots).chain(),
         ),
     );
@@ -71,7 +62,13 @@ pub struct MinigameAssets {
     pub wasd: Handle<Image>,
     #[asset(path = "third-party/mouse.png")]
     pub mouse: Handle<Image>,
+    #[asset(path = "third-party/keyboard.png")]
+    keyboard: Handle<Image>,
+    #[asset(path = "third-party/ear.png")]
+    ear: Handle<Image>,
     //
+    #[asset(path = "sfx/control.ogg")]
+    pub control: Handle<AudioSample>,
     #[asset(path = "sfx/timeout.ogg")]
     timeout: Handle<AudioSample>,
     #[asset(path = "sfx/succeed.ogg")]
@@ -79,17 +76,6 @@ pub struct MinigameAssets {
     //
     #[asset(path = "sfx/glyph.ogg")]
     pub glyph: Handle<AudioSample>,
-    //
-    #[asset(path = "sfx/boom.ogg")]
-    boom: Handle<AudioSample>,
-    #[asset(path = "sfx/start.ogg")]
-    start: Handle<AudioSample>,
-    #[asset(path = "images/count-down/0.png")]
-    one: Handle<Image>,
-    #[asset(path = "images/count-down/1.png")]
-    two: Handle<Image>,
-    #[asset(path = "images/count-down/2.png")]
-    three: Handle<Image>,
 }
 
 #[derive(Default, Clone, Copy, Component, Lerp, Deref, DerefMut)]
@@ -112,74 +98,14 @@ fn ui_translation(
     }
 }
 
-#[derive(Component)]
-struct TextTransition(Timer);
-
-impl TextTransition {
-    fn new(duration: f32) -> Self {
-        Self(Timer::from_seconds(duration, TimerMode::Once))
-    }
-}
-
-#[derive(Component)]
-struct TextTransitionExit(SystemId);
-
-fn tick_text_transition(
-    mut commands: Commands,
-    time: Res<Time>,
-    timer: Single<(&mut TextTransition, &TextTransitionExit)>,
-) {
-    let (mut timer, exit) = timer.into_inner();
-    timer.0.tick(time.delta());
-    if timer.0.just_finished() {
-        commands.run_system(exit.0);
-    }
-}
-
-fn text_transition<M>(
-    commands: &mut Commands,
-    despawn_on_enter: Option<Minigame>,
-    despawn_on_exit: Option<Minigame>,
-    duration: f32,
-    exit: impl IntoSystem<(), (), M> + 'static,
-    text: impl Bundle,
-) {
-    let exit = commands.register_system(exit);
-    let mut tt = commands.spawn((
-        TextTransition::new(duration),
-        TextTransitionExit(exit),
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::BLACK),
-        GlobalZIndex(500),
-        children![(
-            text,
-            TextFont::from_font_size(100.0),
-            TextLayout::new_with_justify(Justify::Center),
-        )],
-    ));
-    debug_assert!(despawn_on_exit.is_some() || despawn_on_enter.is_some());
-    if let Some(state) = despawn_on_enter {
-        tt.insert(DespawnOnEnter(state));
-    }
-    if let Some(state) = despawn_on_exit {
-        tt.insert(DespawnOnExit(state));
-    }
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, SubStates, Component)]
 #[source(GameState = GameState::Playing)]
 pub enum Minigame {
     #[default]
     None,
     Choose,
-    Countdown,
-    Description,
+    EnterWipe,
+    Wipe,
     //
     Matching,
     Path,
@@ -201,11 +127,9 @@ struct Chosen;
 fn choose(
     mut commands: Commands,
     available: Query<Entity, (With<MinigameRoot>, Without<AvailableAfter>)>,
-    mut camera: Single<&mut Transform, With<Camera>>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
     mut writer: MessageWriter<AppExit>,
 ) {
-    camera.translation = Vec3::ZERO;
     let next = if RANDOM {
         available.iter().choose(&mut rng)
     } else {
@@ -213,11 +137,7 @@ fn choose(
     };
     if let Some(entity) = next {
         commands.entity(entity).insert(Chosen);
-        if FAST {
-            commands.run_system_cached(choose_minigame);
-        } else {
-            commands.set_state(Minigame::Countdown);
-        }
+        commands.set_state(Minigame::EnterWipe);
     } else {
         // TODO: finish screen
         // NOTE: changing this will cause the success and failure screens to not
@@ -228,77 +148,45 @@ fn choose(
 }
 
 #[derive(Component)]
-struct CountDown {
-    timer: Timer,
-    index: usize,
+pub enum Description {
+    Keyboard,
+    Wasd,
+    Mouse,
+    Ear,
 }
 
-const CDV: f32 = 0.6;
-
-fn start_count_down(mut commands: Commands, assets: Res<MinigameAssets>) {
-    commands.spawn(SamplePlayer::new(assets.boom.clone()).with_volume(Volume::Linear(CDV)));
-    commands.spawn((
-        DespawnOnExit(Minigame::Countdown),
-        CountDown {
-            timer: Timer::from_seconds(0.33, TimerMode::Repeating),
-            index: 0,
-        },
-        ImageNode::new(assets.three.clone()),
-        ZIndex(10_000),
-        Node {
-            position_type: PositionType::Absolute,
-            align_self: AlignSelf::Center,
-            justify_self: JustifySelf::Center,
-            height: percent(100.0),
-            ..Default::default()
-        },
-    ));
-}
-
-fn count_down(
+fn wipe(
     mut commands: Commands,
-    time: Res<Time>,
-    count_down: Single<(&mut CountDown, &mut ImageNode)>,
+    camera: Single<Entity, With<Transition>>,
     assets: Res<MinigameAssets>,
+    chosen: Single<&Description, With<Chosen>>,
 ) {
-    let (mut cd, mut sprite) = count_down.into_inner();
-    cd.timer.tick(time.delta());
-    if cd.timer.just_finished() {
-        cd.index += 1;
-        match cd.index {
-            1 => {
-                commands
-                    .spawn(SamplePlayer::new(assets.boom.clone()).with_volume(Volume::Linear(CDV)));
-                sprite.image = assets.two.clone();
-            }
-            2 => {
-                commands
-                    .spawn(SamplePlayer::new(assets.boom.clone()).with_volume(Volume::Linear(CDV)));
-                sprite.image = assets.one.clone();
-            }
-            _ => {
-                commands.spawn(
-                    SamplePlayer::new(assets.start.clone()).with_volume(Volume::Linear(CDV)),
-                );
-                commands.set_state(Minigame::Description);
-            }
-        }
-    }
-}
-
-#[derive(Component)]
-pub struct Description(pub &'static str);
-
-fn description(mut commands: Commands, chosen: Single<&Description, With<Chosen>>) {
-    // TODO: art
-    text_transition(
-        &mut commands,
-        None,
-        Some(Minigame::Description),
-        1.0,
-        choose_minigame,
-        Text::new(chosen.0),
-    );
+    let duration = 1.0;
+    let image = match *chosen {
+        Description::Wasd => assets.wasd.clone(),
+        Description::Mouse => assets.mouse.clone(),
+        Description::Keyboard => assets.keyboard.clone(),
+        Description::Ear => assets.ear.clone(),
+    };
+    commands.spawn(controls_bundle(
+        image,
+        duration / 2.0,
+        duration - duration / 2.0,
+        0.5,
+        duration / 2.0,
+    ));
+    commands.entity(*camera).insert(TransitionProgress(0.0));
+    commands.spawn((
+        AnimationTarget(*camera),
+        DespawnFinished,
+        animations![
+            (Duration(duration), Keyframe(TransitionProgress(0.5))),
+            set_state(Minigame::Wipe),
+            system(choose_minigame),
+            Duration(0.5),
+            (Duration(duration), Keyframe(TransitionProgress(1.0))),
+        ],
+    ));
 }
 
 #[derive(Component)]
@@ -347,7 +235,7 @@ fn choose_minigame(
     commands
         .entity(entity)
         .remove_recursive::<Children, Disabled>()
-        .insert(DespawnOnExit(*state));
+        .insert(DespawnOnExit(Minigame::EnterWipe));
     if let Some(on_enable) = on_enable {
         commands.run_system_with(on_enable.0, entity);
     }
@@ -432,66 +320,67 @@ fn end_timer(_: On<EndTimer>, mut commands: Commands) {
 
 fn success(mut commands: Commands, assets: Res<MinigameAssets>) {
     commands.spawn(SamplePlayer::new(assets.succeed.clone()).with_volume(Volume::Linear(0.8)));
-
-    if FAST {
-        commands.set_state(Minigame::Choose);
-        return;
-    }
-
-    // TODO: art
-    text_transition(
-        &mut commands,
-        // TODO: This will not despawn is all the minigames are exhausted
-        Some(Minigame::Countdown),
-        None,
-        1.0,
-        exit,
-        (Text::new("SUCCESS"), TextColor(GREEN_800.into())),
-    );
-    fn exit(mut commands: Commands) {
-        commands.set_state(Minigame::Choose);
-    }
+    commands.set_state(Minigame::Choose);
 }
 
 fn failure(mut commands: Commands, assets: Res<MinigameAssets>, mut failed: Local<usize>) {
     commands.spawn(SamplePlayer::new(assets.timeout.clone()).with_volume(Volume::Linear(1.5)));
 
-    if FAST {
-        commands.set_state(Minigame::Choose);
-        return;
-    }
-
     *failed += 1;
     if *failed >= 3 {
         *failed = 0;
-        // TODO: art
-        text_transition(
-            &mut commands,
-            // TODO: This will not despawn is all the minigames are exhausted
-            Some(Minigame::Countdown),
-            None,
-            1.0,
-            restart,
-            (Text::new("GAME OVER"), TextColor(RED.into())),
-        );
-    } else {
-        // TODO: art
-        text_transition(
-            &mut commands,
-            // TODO: This will not despawn is all the minigames are exhausted
-            Some(Minigame::Countdown),
-            None,
-            1.0,
-            exit,
-            (Text::new("FAILURE"), TextColor(RED.into())),
-        );
-    };
-
-    fn restart(mut commands: Commands) {
+        // TODO: very obvious restarting animation
         commands.set_state(Minigame::None);
         commands.set_state(GameState::Restart);
-    }
-    fn exit(mut commands: Commands) {
+    } else {
         commands.set_state(Minigame::Choose);
     }
+}
+
+fn controls_bundle(
+    image: Handle<Image>,
+    delay: f32,
+    dur_in: f32,
+    pause: f32,
+    dur_out: f32,
+) -> impl Bundle {
+    (
+        ImageNode::new(image),
+        Node {
+            position_type: PositionType::Absolute,
+            align_self: AlignSelf::Center,
+            justify_self: JustifySelf::Center,
+            height: percent(25.0),
+            ..Default::default()
+        },
+        ImageColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
+        UiTranslationPx(Vec2::new(0.0, -20.0)),
+        //
+        AnimationTarget::entity(),
+        DespawnFinished,
+        DespawnOnExit(GameState::Intro),
+        animations![
+            system(|mut commands: Commands, assets: Res<MinigameAssets>| {
+                commands.spawn((
+                    DespawnOnExit(GameState::Intro),
+                    SamplePlayer::new(assets.control.clone()).with_volume(Volume::Linear(0.6)),
+                    PlaybackSettings::default().with_speed(0.5),
+                    sample_effects![FreeverbNode::default()],
+                ));
+            }),
+            Duration(delay),
+            (
+                Duration(dur_in),
+                Keyframe(ImageColor(Color::srgba(1.0, 1.0, 1.0, 1.0))),
+                Keyframe(UiTranslationPx(Vec2::ZERO)),
+                Easing::SineInOut,
+            ),
+            Duration(pause),
+            (
+                Duration(dur_out),
+                Keyframe(ImageColor(Color::srgba(1.0, 1.0, 1.0, 0.0))),
+                Easing::SineInOut,
+            ),
+        ],
+    )
 }

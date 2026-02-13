@@ -116,7 +116,7 @@ fn init_targets(
         MinigameRoot,
         DespawnOnExit(GameState::Playing),
         Minigame::Tempest,
-        Description("DODGE\n(A/D)"),
+        Description::Wasd,
         children![(VariationSet, scenes)],
     ));
 
@@ -140,7 +140,7 @@ fn init_targets(
                 ));
 
                 commands.spawn((
-                    DespawnOnExit(Minigame::Tempest),
+                    DespawnOnExit(Minigame::EnterWipe),
                     Transform::default(),
                     Visibility::default(),
                     colliders(),
@@ -204,7 +204,7 @@ fn spawner(mut commands: Commands, mut query: Query<(Entity, &mut Spawner)>, tim
                     Enemy { angle, vel: 0.0 },
                     Sprite::from_color(Color::WHITE, Vec2::new(50.0, 50.0)),
                     Transform::from_xyz(0.0, 0.0, 1.0),
-                    DespawnOnExit(Minigame::Tempest),
+                    DespawnOnExit(Minigame::EnterWipe),
                 ));
             }
             spawner.wave += 1;

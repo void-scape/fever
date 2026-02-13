@@ -50,8 +50,6 @@ struct IntroAssets {
     rain: Handle<AudioSample>,
     #[asset(path = "images/fractals/star-ship.png")]
     star_ship: Handle<Image>,
-    #[asset(path = "sfx/control.ogg")]
-    control: Handle<AudioSample>,
     #[asset(path = "images/fractals/odd-julia.png")]
     odd_julia: Handle<Image>,
     #[asset(path = "images/fractals/pl-julia.png")]
@@ -192,7 +190,8 @@ fn update_mouse(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     opacity: Single<&PathOpacity>,
-    zoom: Single<&Zoom, With<Fractal>>,
+    cplane: Single<&CPlane, With<Fractal>>,
+    coords: JuliaCoordinates,
 ) {
     let (camera, camera_transform) = camera.into_inner();
     if let Some(w) = window
@@ -200,15 +199,16 @@ fn update_mouse(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate())
     {
-        let c = Vec2::new(w_to_c(w.x, zoom.0), w_to_c(w.y, zoom.0));
         let mut path = vec![Vec2::ZERO];
-        let mut z = Vec2::ZERO;
+        let c = cplane.0;
+        let mut z = coords.julia2(w);
         for _ in 0..100 {
             if z.length_squared() > 4.0 * 4.0 {
+                path.push(z);
                 break;
             }
-            z = cmul(z, z) + c;
             path.push(z);
+            z = cmul(z, z) + c;
         }
 
         if path.len() <= 1 {
@@ -217,8 +217,8 @@ fn update_mouse(
 
         for points in path.windows(2) {
             gizmos.line_2d(
-                Vec2::new(c_to_w(points[0].x, zoom.0), c_to_w(points[0].y, zoom.0)),
-                Vec2::new(c_to_w(points[1].x, zoom.0), c_to_w(points[1].y, zoom.0)),
+                coords.world2(points[0]),
+                coords.world2(points[1]),
                 Color::WHITE.with_alpha(opacity.0),
             );
         }
@@ -373,7 +373,7 @@ fn controls_bundle(
         DespawnFinished,
         DespawnOnExit(GameState::Intro),
         animations![
-            system(|mut commands: Commands, assets: Res<IntroAssets>| {
+            system(|mut commands: Commands, assets: Res<MinigameAssets>| {
                 commands.spawn((
                     DespawnOnExit(GameState::Intro),
                     SamplePlayer::new(assets.control.clone()).with_volume(Volume::Linear(0.6)),

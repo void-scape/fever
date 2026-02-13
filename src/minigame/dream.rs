@@ -106,7 +106,7 @@ fn init_targets(mut commands: Commands, assets: Res<DreamAssets>) {
         AvailableAfter(6),
         Minigame::Dream,
         Dream,
-        Description("LISTEN\n(SPACE/ENTER)"),
+        Description::Ear,
         variations,
     ));
 

@@ -1,7 +1,7 @@
 use crate::{
     audio::Lpf,
     camera::lock_camera,
-    fractal::{BurningShip, CPlane, Fractal, FractalTexture},
+    fractal::{BurningShip, CPlane, Exponent, Fractal, FractalTexture, Mandelbrot, Zoom},
     minigame::{
         Description, Minigame, MinigameRoot, NotRandom, OnVariationEnable, StartTimer, Variation,
         VariationSet,
@@ -112,7 +112,7 @@ fn init_typing(
         MinigameRoot,
         DespawnOnExit(GameState::Playing),
         Minigame::Typing,
-        Description("TYPE THE TEXT"),
+        Description::Keyboard,
         children![(VariationSet, NotRandom, text)],
     ));
 
@@ -128,52 +128,33 @@ fn init_typing(
         let t = text.clone();
         let on_start = OnVariationEnable(commands.register_system(
             move |_: In<Entity>, mut commands: Commands, fractal: Single<Entity, With<Fractal>>| {
-                let cx = 0.4888928;
-                let cy = 0.08791673;
-                commands.entity(*fractal).insert((
-                    FractalTexture(texture.clone()),
-                    BurningShip(1),
-                    CPlane(Vec2::new(cx, cy)),
-                ));
-
                 if let Some(image) = image.clone() {
-                    commands.spawn((
-                        DespawnOnExit(Minigame::Typing),
-                        ImageNode::new(image),
-                        ZIndex(-1),
-                        Node {
-                            position_type: PositionType::Absolute,
-                            align_self: AlignSelf::Center,
-                            justify_self: JustifySelf::Center,
-                            height: percent(100.0),
-                            ..Default::default()
-                        },
-                        BackgroundColor(Color::BLACK),
+                    commands.entity(*fractal).insert((
+                        FractalTexture(image),
+                        Mandelbrot(1),
+                        Exponent(6.0),
+                        Zoom(1.25),
+                    ));
+                } else {
+                    commands.entity(*fractal).insert((
+                        FractalTexture(texture.clone()),
+                        BurningShip(1),
+                        CPlane(Vec2::new(0.4888928, 0.08791673)),
                     ));
                 }
 
                 commands.spawn((
-                    DespawnOnExit(Minigame::Typing),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    children![(
-                        TypingText,
-                        Text::default(),
-                        children![
-                            (
-                                TextSpan::default(),
-                                TextColor(RED.into()),
-                                TextFont::from_font_size(80.0)
-                            ),
-                            (TextSpan::new(text.clone()), TextFont::from_font_size(80.0)),
-                        ]
-                    )],
+                    DespawnOnExit(Minigame::EnterWipe),
+                    TypingText,
+                    Text2d::default(),
+                    children![
+                        (
+                            TextSpan::default(),
+                            TextColor(RED.into()),
+                            TextFont::from_font_size(80.0)
+                        ),
+                        (TextSpan::new(text.clone()), TextFont::from_font_size(80.0)),
+                    ],
                 ));
             },
         ));

@@ -3,9 +3,11 @@ use crate::{
     state::GameState,
 };
 use bevy::{
+    ecs::system::SystemParam,
     prelude::*,
     render::render_resource::{AsBindGroup, ShaderType},
     sprite_render::{Material2d, Material2dPlugin},
+    window::PrimaryWindow,
 };
 use fever_macros::Lerp;
 
@@ -130,7 +132,7 @@ new_type_param!(EscapeRadius, f32, escape_radius, 2.0);
 new_type_param!(Exponent, f32, exponent, 2.0);
 
 #[derive(Component)]
-struct FractalMesh;
+pub struct FractalMesh;
 
 const MESH_SIZE: f32 = 1024.0;
 
@@ -151,8 +153,11 @@ fn spawn(
 fn sync_fractal_material_with_camera(
     mut fractal: Single<&mut Transform, (With<FractalMesh>, Without<Camera2d>)>,
     camera: Single<&Transform, With<Camera2d>>,
+    window: Single<&Window, With<PrimaryWindow>>,
 ) {
-    fractal.translation = camera.translation;
+    fractal.translation.x = camera.translation.x;
+    fractal.translation.y = camera.translation.y;
+    fractal.scale = Vec3::splat(window.size().min_element());
 }
 
 #[derive(Debug, Default, Clone, Asset, TypePath, AsBindGroup, Component)]
@@ -166,7 +171,7 @@ struct FractalUniform {
 
 impl Material2d for FractalUniform {
     fn fragment_shader() -> bevy::shader::ShaderRef {
-        "fractal.wgsl".into()
+        "shaders/fractal.wgsl".into()
     }
 
     fn alpha_mode(&self) -> bevy::sprite_render::AlphaMode2d {
@@ -205,16 +210,32 @@ fn log_params(
     }
 }
 
-pub fn c_to_w(c: f32, zoom: f32) -> f32 {
-    c / zoom * MESH_SIZE / 2.0
+#[derive(SystemParam)]
+pub struct JuliaCoordinates<'w, 's> {
+    mesh: Single<'w, 's, &'static Transform, With<FractalMesh>>,
+    zoom: Single<'w, 's, &'static Zoom, With<Fractal>>,
 }
 
-pub fn w_to_c(w: f32, zoom: f32) -> f32 {
-    w * zoom / MESH_SIZE * 2.0
-}
+impl JuliaCoordinates<'_, '_> {
+    pub fn world(&self, c: f32) -> f32 {
+        c / self.zoom.0 * self.mesh.scale.x / 2.0
+    }
 
-pub fn ctransform(cx: f32, cy: f32, zoom: f32) -> Transform {
-    Transform::from_translation(Vec3::new(c_to_w(cx, zoom), c_to_w(cy, zoom), 0.0))
+    pub fn world2(&self, c: Vec2) -> Vec2 {
+        Vec2::new(self.world(c.x), self.world(c.y))
+    }
+
+    pub fn julia(&self, w: f32) -> f32 {
+        w * self.zoom.0 / self.mesh.scale.x * 2.0
+    }
+
+    pub fn julia2(&self, w: Vec2) -> Vec2 {
+        Vec2::new(self.julia(w.x), self.julia(w.y))
+    }
+
+    pub fn transform(&self, cx: f32, cy: f32) -> Transform {
+        Transform::from_translation(Vec3::new(self.world(cx), self.world(cy), 0.0))
+    }
 }
 
 pub fn cmul(a: Vec2, b: Vec2) -> Vec2 {
