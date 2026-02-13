@@ -39,9 +39,18 @@ pub fn await_finish(text: impl Bundle) -> impl Bundle {
     blocking_system(
         move |mut commands: Commands,
               advance: Query<Entity, With<Advance>>,
-              mut entity: Local<Option<Entity>>| {
+              mut entity: Local<Option<Entity>>,
+              input: Res<ButtonInput<KeyCode>>,
+              typewriters: Query<Entity, With<Typewriter>>| {
             if let Some(text) = text.take() {
                 *entity = Some(commands.spawn(text_node(text)).id());
+            }
+
+            if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
+                for entity in typewriters.iter() {
+                    commands.entity(entity).insert(FinishTypewriter);
+                }
+                return false;
             }
 
             let result = !advance.is_empty();
@@ -63,12 +72,21 @@ pub fn await_input(text: impl Bundle) -> impl Bundle {
               advance: Query<Entity, With<Advance>>,
               input: Res<ButtonInput<KeyCode>>,
               mut awaiting_input: Local<bool>,
-              mut entity: Local<Option<Entity>>| {
+              mut entity: Local<Option<Entity>>,
+              typewriters: Query<Entity, With<Typewriter>>| {
             if let Some(text) = text.take() {
                 *entity = Some(commands.spawn(text_node(text)).id());
             }
 
             if !*awaiting_input {
+                if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
+                    for entity in typewriters.iter() {
+                        commands.entity(entity).insert(FinishTypewriter);
+                    }
+                    *awaiting_input = true;
+                    return false;
+                }
+
                 for entity in advance.iter() {
                     *awaiting_input = true;
                     commands.entity(entity).despawn();
@@ -76,10 +94,15 @@ pub fn await_input(text: impl Bundle) -> impl Bundle {
                 false
             } else {
                 let result = input
-                    .get_pressed()
+                    .get_just_pressed()
                     .any(|k| *k == KeyCode::Space || *k == KeyCode::Enter);
                 if result && let Some(entity) = *entity {
                     commands.entity(entity).despawn();
+                }
+                if result {
+                    for entity in advance.iter() {
+                        commands.entity(entity).despawn();
+                    }
                 }
                 result
             }

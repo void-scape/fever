@@ -1,6 +1,7 @@
 use crate::{
     audio::Lpf,
-    fractal::{FractalUniform, Params, ctransform, unlock_camera},
+    camera::unlock_camera,
+    fractal::{CPlane, Fractal, FractalTexture, ctransform},
     minigame::{
         Description, Minigame, MinigameRoot, OnVariationEnable, StartTimer, Variation, VariationSet,
     },
@@ -119,8 +120,14 @@ fn init_targets(
         cx: f32,
         cy: f32,
     ) -> impl Bundle {
+        let dc = Vec2::from_angle(rng.random_range(0.0..TAU)) * r;
         let enable = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>, mut commands: Commands| {
+            move |_: In<Entity>, mut commands: Commands, fractal: Single<Entity, With<Fractal>>| {
+                commands.entity(*fractal).insert((
+                    FractalTexture(texture.clone()),
+                    CPlane(Vec2::new(cx, cy) + dc),
+                ));
+
                 commands.spawn((
                     DespawnOnExit(Minigame::Matching),
                     ImageNode {
@@ -137,7 +144,7 @@ fn init_targets(
                 ));
             },
         ));
-        let dc = Vec2::from_angle(rng.random_range(0.0..TAU)) * r;
+
         (
             Variation,
             StartTimer(8.0),
@@ -153,15 +160,6 @@ fn init_targets(
                 frequency: 20_000.0
             }],
             Lpf(20_000.0),
-            FractalUniform {
-                texture,
-                params: Params {
-                    cx: dc.x + cx,
-                    cy: dc.y + cy,
-                    zoom: 1.5,
-                    ..Default::default()
-                },
-            },
         )
     }
 }

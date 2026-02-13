@@ -2,6 +2,7 @@ use crate::animation::*;
 use crate::audio::LinearVolume;
 use crate::audio::Lpf;
 use crate::audio::PlaybackSpeed;
+use crate::camera::MovementSensitivity;
 use crate::fractal::*;
 use crate::minigame::ImageColor;
 use crate::minigame::MinigameAssets;
@@ -18,6 +19,15 @@ use bevy_seedling::prelude::*;
 use fever_macros::Lerp;
 
 pub fn plugin(app: &mut App) {
+    #[cfg(feature = "dev")]
+    app.add_systems(
+        OnEnter(GameState::Intro),
+        |mut scale: ResMut<DeltaScale>| scale.0 = 100.0,
+    )
+    .add_systems(OnExit(GameState::Intro), |mut scale: ResMut<DeltaScale>| {
+        scale.0 = 1.0
+    });
+
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<IntroAssets>())
         .add_sub_state::<Intro>()
         .add_systems(OnEnter(Intro::Fade), fade)
@@ -38,14 +48,14 @@ pub fn plugin(app: &mut App) {
 struct IntroAssets {
     #[asset(path = "music/rain.ogg")]
     rain: Handle<AudioSample>,
+    #[asset(path = "images/fractals/star-ship.png")]
+    star_ship: Handle<Image>,
     #[asset(path = "sfx/control.ogg")]
     control: Handle<AudioSample>,
     #[asset(path = "images/fractals/odd-julia.png")]
     odd_julia: Handle<Image>,
     #[asset(path = "images/fractals/pl-julia.png")]
     pl_julia: Handle<Image>,
-    #[asset(path = "images/fractals/last-breath.png")]
-    last_breath: Handle<Image>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, SubStates, Component)]
@@ -105,12 +115,14 @@ fn fade(mut commands: Commands, fractal: Single<Entity, With<Fractal>>, assets: 
     ));
 
     commands.entity(*fractal).insert((
+        FractalTexture(assets.star_ship.clone()),
         CPlane(Vec2::new(-0.66333276, 0.42333305)),
         Iterations(0.0),
         Opacity(0.0),
         Zoom(1.5),
     ));
     commands.spawn((
+        DespawnOnExit(GameState::Intro),
         AnimationTarget(*fractal),
         DespawnFinished,
         animations![
@@ -150,6 +162,7 @@ fn mouse_controls(mut commands: Commands, mg_assets: Res<MinigameAssets>) {
 
 fn mouse(mut commands: Commands, music: Single<Entity, With<Music>>) {
     commands.spawn((
+        DespawnOnExit(GameState::Intro),
         PathOpacity(0.0),
         AnimationTarget::entity(),
         DespawnFinished,
@@ -248,6 +261,7 @@ fn move_state(
     fractal: Single<Entity, With<Fractal>>,
 ) {
     commands.spawn((
+        DespawnOnExit(GameState::Intro),
         DespawnFinished,
         animations![
             (
@@ -297,27 +311,17 @@ fn move_state(
 
 fn flavor_text(mut commands: Commands) {
     commands.spawn((
+        DespawnOnExit(GameState::Intro),
         DespawnFinished,
         animations![
             system(
-                |fractal: Single<
-                    (
-                        &mut Zoom,
-                        &mut Opacity,
-                        &mut CPlane,
-                        &mut Iterations,
-                        &mut FractalTexture
-                    ),
-                    With<Fractal>,
-                >,
+                |mut commands: Commands,
+                 fractal: Single<Entity, With<Fractal>>,
                  assets: Res<IntroAssets>| {
-                    let (mut zoom, mut opacity, mut cplane, mut iterations, mut texture) =
-                        fractal.into_inner();
-                    zoom.0 = 1.5;
-                    opacity.0 = 1.0;
-                    cplane.0 = Vec2::ZERO;
-                    iterations.0 = 0.0;
-                    texture.0 = assets.odd_julia.clone();
+                    commands
+                        .entity(*fractal)
+                        .insert(ResetFractal)
+                        .insert((Iterations(0.0), FractalTexture(assets.odd_julia.clone())));
                 }
             ),
             await_input(pretty!(
@@ -326,7 +330,7 @@ fn flavor_text(mut commands: Commands) {
             system(
                 |mut texture: Single<&mut FractalTexture, With<Fractal>>,
                  assets: Res<IntroAssets>| {
-                    texture.0 = assets.last_breath.clone();
+                    texture.0 = assets.odd_julia.clone();
                 }
             ),
             await_finish(pretty!("Do you|0.1| hate [me](glitch, red)?|0.25|")),
@@ -336,6 +340,9 @@ fn flavor_text(mut commands: Commands) {
                     texture.0 = assets.pl_julia.clone();
                 }
             ),
+            system(|mut opacity: Single<&mut Opacity, With<Fractal>>| {
+                opacity.0 = 0.0;
+            }),
             await_input(pretty!(
                 "|1|<0.9>I move my hand over you|0.25|<1.15> but it<1> does not block your \
                 <0.8>[bleeding glow](glitch, red).|1| You must be|0.25|<0.75> imaginary."
@@ -364,9 +371,11 @@ fn controls_bundle(
         //
         AnimationTarget::entity(),
         DespawnFinished,
+        DespawnOnExit(GameState::Intro),
         animations![
             system(|mut commands: Commands, assets: Res<IntroAssets>| {
                 commands.spawn((
+                    DespawnOnExit(GameState::Intro),
                     SamplePlayer::new(assets.control.clone()).with_volume(Volume::Linear(0.6)),
                     PlaybackSettings::default().with_speed(0.5),
                     sample_effects![FreeverbNode::default()],

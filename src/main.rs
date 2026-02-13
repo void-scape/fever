@@ -6,6 +6,7 @@ use bevy_rand::prelude::WyRand;
 #[allow(unused)]
 mod animation;
 mod audio;
+mod camera;
 mod fractal;
 mod intro;
 mod minigame;
@@ -44,6 +45,7 @@ fn main() {
         intro::plugin,
         animation::plugin,
         text::plugin,
+        camera::plugin,
     ))
     .add_systems(Startup, gizmos_line_width);
 

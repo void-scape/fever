@@ -11,6 +11,7 @@ pub fn plugin(app: &mut App) {
         .add_observer(animation_target)
         .init_resource::<ScheduledKeyframes>()
         .init_resource::<ScheduledDeltas>()
+        .init_resource::<DeltaScale>()
         .add_systems(
             Update,
             (
@@ -234,6 +235,15 @@ fn advance(
     }
 }
 
+#[derive(Resource)]
+pub struct DeltaScale(pub f32);
+
+impl Default for DeltaScale {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 fn playhead(
     mut commands: Commands,
     mut leaves: Query<
@@ -241,8 +251,10 @@ fn playhead(
         (With<Active>, Without<Blocked>),
     >,
     time: Res<Time>,
+    // TODO: prob something with time that works here
+    scale: Res<DeltaScale>,
 ) {
-    let dt = time.delta_secs();
+    let dt = time.delta_secs() * scale.0;
     for (entity, mut playhead, duration, parent, is_loop) in leaves.iter_mut() {
         playhead.0 += dt;
         if playhead.0 >= duration.0 {

@@ -1,6 +1,7 @@
 use crate::{
     audio::Lpf,
-    fractal::{FractalUniform, Params, lock_camera},
+    camera::lock_camera,
+    fractal::{BurningShip, CPlane, Fractal, FractalTexture},
     minigame::{
         Description, Minigame, MinigameRoot, NotRandom, OnVariationEnable, StartTimer, Variation,
         VariationSet,
@@ -28,6 +29,8 @@ pub fn plugin(app: &mut App) {
 struct TypingAssets {
     #[asset(path = "images/fractals/star-ship.png")]
     star_ship: Handle<Image>,
+
+    // TODO: I already used these weird julia sets in the intro... make more?
     #[asset(path = "images/fractals/odd-julia.png")]
     odd_julia: Handle<Image>,
     #[asset(path = "images/fractals/pl-julia.png")]
@@ -124,7 +127,15 @@ fn init_typing(
         let text = text.into();
         let t = text.clone();
         let on_start = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>, mut commands: Commands| {
+            move |_: In<Entity>, mut commands: Commands, fractal: Single<Entity, With<Fractal>>| {
+                let cx = 0.4888928;
+                let cy = 0.08791673;
+                commands.entity(*fractal).insert((
+                    FractalTexture(texture.clone()),
+                    BurningShip(1),
+                    CPlane(Vec2::new(cx, cy)),
+                ));
+
                 if let Some(image) = image.clone() {
                     commands.spawn((
                         DespawnOnExit(Minigame::Typing),
@@ -166,11 +177,6 @@ fn init_typing(
                 ));
             },
         ));
-        // let cx = rng.random_range(-0.5..0.5);
-        // let cy = rng.random_range(-0.5..0.5);
-        // println!("{cx}\n{cy}");
-        let cx = 0.4888928;
-        let cy = 0.08791673;
 
         (
             Variation,
@@ -184,15 +190,6 @@ fn init_typing(
                 frequency: 20_000.0
             }],
             Lpf(20_000.0),
-            FractalUniform {
-                texture,
-                params: Params {
-                    burning_ship: 1,
-                    cx,
-                    cy,
-                    ..Default::default()
-                },
-            },
         )
     }
 }

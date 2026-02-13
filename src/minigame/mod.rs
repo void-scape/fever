@@ -1,6 +1,7 @@
 use crate::{
     animation::AnimationSystems,
-    fractal::{Fractal, FractalUniform, Zoom, c_to_w},
+    camera::MovementSensitivity,
+    fractal::{Fractal, ResetFractal},
     state::GameState,
 };
 use bevy::{
@@ -319,28 +320,26 @@ fn available_after(mut commands: Commands, mut available: Query<(Entity, &mut Av
 fn choose_minigame(
     mut commands: Commands,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
-    mut uniforms: ResMut<Assets<FractalUniform>>,
-    mut camera: Single<&mut Transform, With<Camera>>,
     root: Single<(Entity, &Children, &Minigame), (With<MinigameRoot>, With<Chosen>)>,
     sets: Query<(&Children, Has<NotRandom>), With<VariationSet>>,
     variations: Query<
-        (
-            Entity,
-            Option<&FractalUniform>,
-            Option<&StartTimer>,
-            Option<&OnVariationEnable>,
-            Has<DontSyncCamera>,
-        ),
+        (Entity, Option<&StartTimer>, Option<&OnVariationEnable>),
         (With<Variation>, Allow<Disabled>),
     >,
-    zoom: Single<&Zoom, With<Fractal>>,
+    fractal: Single<Entity, With<Fractal>>,
+    camera: Single<Entity, With<Camera>>,
 ) {
+    commands.entity(*fractal).insert(ResetFractal);
+    commands
+        .entity(*camera)
+        .insert(MovementSensitivity::default());
+
     let (entity, children, state) = root.into_inner();
     commands.entity(entity).remove::<Chosen>();
     commands.set_state(*state);
 
     let (set, not_random) = sets.iter_many(children).next().unwrap();
-    let (entity, uniform, timer, on_enable, dont_sync) = if RANDOM && !not_random {
+    let (entity, timer, on_enable) = if RANDOM && !not_random {
         variations.iter_many(set).choose(&mut rng).unwrap()
     } else {
         variations.iter_many(set).next().unwrap()
@@ -351,19 +350,6 @@ fn choose_minigame(
         .insert(DespawnOnExit(*state));
     if let Some(on_enable) = on_enable {
         commands.run_system_with(on_enable.0, entity);
-    }
-    if let Some(uniform) = uniform {
-        if dont_sync {
-            camera.translation.x = 0.0;
-            camera.translation.y = 0.0;
-        } else {
-            camera.translation.x = c_to_w(uniform.params.cx, zoom.0);
-            camera.translation.y = c_to_w(uniform.params.cy, zoom.0);
-        }
-        for (_, fractal) in uniforms.iter_mut() {
-            fractal.texture = uniform.texture.clone();
-            fractal.params = uniform.params;
-        }
     }
     if let Some(timer) = timer {
         commands.spawn((
@@ -413,9 +399,6 @@ pub struct Variation;
 
 #[derive(Clone, Copy, Component)]
 pub struct OnVariationEnable(pub SystemId<In<Entity>, ()>);
-
-#[derive(Component)]
-pub struct DontSyncCamera;
 
 #[derive(Component)]
 struct GameTimer(Timer);

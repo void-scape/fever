@@ -1,5 +1,9 @@
+use crate::animation::*;
+use crate::animations;
+use crate::camera::lock_camera;
+use crate::text::{await_finish, await_input};
 use crate::{
-    fractal::lock_camera,
+    fractal::{Fractal, Opacity},
     minigame::{
         AvailableAfter, Description, Minigame, MinigameRoot, NotRandom, OnVariationEnable,
         Variation, VariationSet,
@@ -13,20 +17,12 @@ use bevy_seedling::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<DreamAssets>())
-        .add_observer(advance_text)
         .add_systems(OnEnter(GameState::Playing), init_targets)
-        .add_systems(OnEnter(Minigame::Dream), lock_camera)
-        .add_systems(
-            Update,
-            (await_input, empty).run_if(in_state(Minigame::Dream)),
-        );
+        .add_systems(OnEnter(Minigame::Dream), lock_camera);
 }
 
 #[derive(AssetCollection, Resource)]
 struct DreamAssets {
-    #[asset(path = "sfx/glyph.ogg")]
-    glyph: Handle<AudioSample>,
-    //
     #[asset(path = "music/rain.ogg")]
     rain: Handle<AudioSample>,
     #[asset(path = "music/deep.ogg")]
@@ -41,23 +37,68 @@ struct DreamAssets {
 struct Dream;
 
 fn init_targets(mut commands: Commands, assets: Res<DreamAssets>) {
-    let empty_start = OnVariationEnable(commands.register_system(
-        |_: In<Entity>, mut commands: Commands| {
-            commands.spawn((
-                DespawnOnExit(Minigame::Dream),
-                Node {
-                    width: percent(100.0),
-                    height: percent(100.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BackgroundColor(Color::BLACK),
-                GlobalZIndex(500),
-            ));
-        },
-    ));
-    let on_start = OnVariationEnable(commands.register_system(advance_text_with));
+    let variations = children![(
+        VariationSet,
+        NotRandom,
+        children![
+            variation(
+                &mut commands,
+                (
+                    SamplePlayer::new(assets.deep.clone())
+                        .with_volume(Volume::Linear(1.0))
+                        .looping(),
+                    DespawnFinished,
+                    animations![Duration(5.0), set_state(Minigame::Success)]
+                )
+            ),
+            variation(
+                &mut commands,
+                (
+                    SamplePlayer::new(assets.rain.clone())
+                        .with_volume(Volume::Linear(1.0))
+                        .looping(),
+                    DespawnFinished,
+                    animations![
+                        await_input(pretty!(
+                            "|2|You|0.25| should not|0.5| be [here](shake, red)<0.5>..."
+                        )),
+                        set_state(Minigame::Success)
+                    ]
+                )
+            ),
+            variation(
+                &mut commands,
+                (
+                    SamplePlayer::new(assets.birds.clone())
+                        .with_volume(Volume::Linear(1.0))
+                        .looping(),
+                    DespawnFinished,
+                    animations![
+                        await_input(pretty!("|2|There is no end.")),
+                        await_input(pretty!(
+                            "A [dream](red) with no beginning has no end<0.5>..."
+                        )),
+                        set_state(Minigame::Success)
+                    ]
+                )
+            ),
+            variation(
+                &mut commands,
+                (
+                    SamplePlayer::new(assets.hell.clone())
+                        .with_volume(Volume::Linear(1.0))
+                        .looping(),
+                    DespawnFinished,
+                    animations![
+                        await_input(pretty!("What do you seek in this [dream](red)?")),
+                        await_input(pretty!("This [dream](red) will only take from you.")),
+                        await_finish(pretty!("|1.0|How did you get [here](red)?|0.25|")),
+                        set_state(Minigame::Success)
+                    ]
+                )
+            ),
+        ],
+    )];
 
     commands.spawn((
         MinigameRoot,
@@ -66,180 +107,21 @@ fn init_targets(mut commands: Commands, assets: Res<DreamAssets>) {
         Minigame::Dream,
         Dream,
         Description("LISTEN\n(SPACE/ENTER)"),
-        children![(
-            VariationSet,
-            NotRandom,
-            children![
-                (
-                    Variation,
-                    empty_start,
-                    Empty(Timer::from_seconds(5.0, TimerMode::Once)),
-                    SamplePlayer::new(assets.deep.clone())
-                        .with_volume(Volume::Linear(1.0))
-                        .looping(),
-                ),
-                (
-                    Variation,
-                    TextSequence,
-                    on_start,
-                    SamplePlayer::new(assets.rain.clone())
-                        .with_volume(Volume::Linear(1.0))
-                        .looping(),
-                    children![TextSeg(pretty!(
-                        "|2|You|0.25| should not|0.5| be [here](shake, red)<0.5>..."
-                    ))]
-                ),
-                (
-                    Variation,
-                    TextSequence,
-                    on_start,
-                    SamplePlayer::new(assets.birds.clone())
-                        .with_volume(Volume::Linear(1.0))
-                        .looping(),
-                    children![
-                        TextSeg(pretty!("|2|There is no end.")),
-                        TextSeg(pretty!(
-                            "A [dream](red) with no beginning has no end<0.5>..."
-                        ))
-                    ]
-                ),
-                (
-                    Variation,
-                    TextSequence,
-                    on_start,
-                    SamplePlayer::new(assets.hell.clone())
-                        .with_volume(Volume::Linear(1.0))
-                        .looping(),
-                    children![
-                        TextSeg(pretty!("What do you seek in this [dream](red)?")),
-                        TextSeg(pretty!("This [dream](red) will only take from you.")),
-                        (
-                            TextSeg(pretty!("|1.0|How did you get [here](red)?|0.25|")),
-                            SkipInput
-                        ),
-                    ]
-                )
-            ],
-        )],
+        variations,
     ));
-}
 
-#[derive(Component)]
-struct Empty(Timer);
-
-fn empty(mut commands: Commands, mut empty: Single<&mut Empty>, time: Res<Time>) {
-    empty.0.tick(time.delta());
-    if empty.0.just_finished() {
-        commands.set_state(Minigame::Success);
-    }
-}
-
-#[derive(Component)]
-#[require(TextIndex)]
-struct TextSequence;
-
-#[derive(Default, Component)]
-struct TextIndex(usize);
-
-#[derive(Component)]
-struct TextSeg(ParsedPrettyText<Text>);
-
-fn advance_text(
-    finished: On<TypewriterFinished>,
-    mut commands: Commands,
-    skip: Query<(), With<SkipInput>>,
-) {
-    if skip.get(finished.entity).is_ok() {
-        commands.run_system_cached_with(advance_text_with, Entity::PLACEHOLDER);
-    } else {
-        commands.spawn(AwaitInput);
-    }
-}
-
-#[derive(Component)]
-struct AwaitInput;
-
-#[derive(Component)]
-struct SkipInput;
-
-fn await_input(
-    mut commands: Commands,
-    await_input: Query<Entity, With<AwaitInput>>,
-    active: Query<Entity, With<Typewriter>>,
-    input: Res<ButtonInput<KeyCode>>,
-) {
-    if await_input.is_empty() {
-        if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
-            for entity in active.iter() {
-                commands.entity(entity).insert(FinishTypewriter);
-            }
-        }
-        return;
-    }
-    if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
-        for entity in await_input.iter() {
-            commands.entity(entity).despawn();
-        }
-        commands.run_system_cached_with(advance_text_with, Entity::PLACEHOLDER);
-    }
-}
-
-fn advance_text_with(
-    _: In<Entity>,
-    mut commands: Commands,
-    seq: Single<(&mut TextIndex, Option<&Children>), With<TextSequence>>,
-    text: Query<(&TextSeg, Has<SkipInput>)>,
-) {
-    let (mut index, seq) = seq.into_inner();
-    if let Some(children) = seq
-        && let Some(child) = children.iter().nth(index.0)
-    {
-        let (text, skip_input) = text.get(child).unwrap();
-        commands
-            .spawn((
-                DespawnOnExit(Minigame::Dream),
-                Node {
-                    width: percent(100.0),
-                    height: percent(100.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BackgroundColor(Color::BLACK),
-                GlobalZIndex(500),
-            ))
-            .with_children(|s| {
-                let mut entity = s.spawn((
-                    Node {
-                        width: percent(80.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..Default::default()
-                    },
-                    text.0.clone().into_bundle(),
-                    TextFont::from_font_size(50.0),
-                    TextLayout::new_with_justify(Justify::Center),
-                    Typewriter::new(15.0),
-                ));
-                entity.observe(
-                    |revealed: On<Revealed<Char>>,
-                     mut commands: Commands,
-                     assets: Res<DreamAssets>| {
-                        if revealed.event().text != " " {
-                            commands.spawn((
-                                SamplePlayer::new(assets.glyph.clone())
-                                    .with_volume(Volume::Linear(0.8)),
-                                RandomPitch::new(0.05),
-                            ));
-                        }
-                    },
-                );
-                if skip_input {
-                    entity.insert(SkipInput);
+    fn variation(commands: &mut Commands, bundle: impl Bundle) -> impl Bundle {
+        let mut bundle = Some(bundle);
+        let on_start = OnVariationEnable(commands.register_system(
+            move |_: In<Entity>,
+                  mut commands: Commands,
+                  mut opacity: Single<&mut Opacity, With<Fractal>>| {
+                opacity.0 = 0.0;
+                if let Some(bundle) = bundle.take() {
+                    commands.spawn(bundle);
                 }
-            });
-        index.0 += 1;
-        return;
+            },
+        ));
+        (Variation, on_start)
     }
-    commands.set_state(Minigame::Success);
 }

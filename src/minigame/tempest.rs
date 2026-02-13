@@ -1,10 +1,8 @@
 use crate::{
     audio::Lpf,
-    fractal::{FractalUniform, Params, lock_camera},
-    minigame::{
-        Description, DontSyncCamera, Minigame, MinigameRoot, OnVariationEnable, Variation,
-        VariationSet,
-    },
+    camera::{force_camera_origin, lock_camera, unforce_camera_origin},
+    fractal::{BurningShip, CPlane, Fractal, FractalTexture, Mandelbrot, Zoom},
+    minigame::{Description, Minigame, MinigameRoot, OnVariationEnable, Variation, VariationSet},
     state::GameState,
 };
 use bevy::{color::palettes::css::YELLOW, prelude::*};
@@ -18,6 +16,8 @@ pub fn plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<TempestAssets>())
         .add_systems(OnEnter(GameState::Playing), init_targets)
         .add_systems(OnEnter(Minigame::Tempest), lock_camera)
+        .add_systems(OnEnter(Minigame::Tempest), force_camera_origin)
+        .add_systems(OnExit(Minigame::Tempest), unforce_camera_origin)
         .add_systems(
             Update,
             (
@@ -130,7 +130,15 @@ fn init_targets(
         T: Bundle,
     {
         let on_enable = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>, mut commands: Commands| {
+            move |_: In<Entity>, mut commands: Commands, fractal: Single<Entity, With<Fractal>>| {
+                commands.entity(*fractal).insert((
+                    FractalTexture(texture.clone()),
+                    CPlane(Vec2::new(-1.741702, -0.052180)),
+                    BurningShip(1),
+                    Mandelbrot(1),
+                    Zoom(0.05),
+                ));
+
                 commands.spawn((
                     DespawnOnExit(Minigame::Tempest),
                     Transform::default(),
@@ -141,20 +149,8 @@ fn init_targets(
         ));
         (
             Variation,
-            DontSyncCamera,
             SceneRoot,
             on_enable,
-            FractalUniform {
-                texture,
-                params: Params {
-                    cx: -1.741702,
-                    cy: -0.052180,
-                    burning_ship: 1,
-                    mandelbrot: 1,
-                    zoom: 0.05,
-                    ..Default::default()
-                },
-            },
             SamplePlayer::new(music)
                 .with_volume(Volume::Linear(0.8))
                 .looping(),
@@ -239,10 +235,8 @@ fn enemy(
     }
 }
 
-fn zoom(mut uniforms: ResMut<Assets<FractalUniform>>, time: Res<Time>) {
-    for (_, fractal) in uniforms.iter_mut() {
-        fractal.params.zoom *= (-time.delta_secs()).exp();
-    }
+fn zoom(mut zoom: Single<&mut Zoom, With<Fractal>>, time: Res<Time>) {
+    zoom.0 *= (-time.delta_secs()).exp();
 }
 
 fn lpf(mut lpf: Single<&mut Lpf, With<SceneRoot>>, enemies: Query<&Transform, With<Enemy>>) {
