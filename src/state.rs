@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 
-pub fn plugin(app: &mut App) {
+pub fn state_plugin(app: &mut App) {
     #[cfg(not(feature = "explore"))]
     let state = GameState::Intro;
     #[cfg(feature = "explore")]
@@ -19,6 +19,7 @@ pub enum GameState {
     Intro,
     Playing,
     Restart,
+    Outro,
     #[cfg(feature = "dev")]
     Explore,
 }

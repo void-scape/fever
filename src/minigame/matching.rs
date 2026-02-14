@@ -1,15 +1,6 @@
 use crate::{
-    animation::*,
-    animations,
-    audio::{Lpf, PlaybackSpeed},
-    camera::{MovementSensitivity, unlock_camera},
-    fractal::{CPlane, Fractal, FractalTexture, JuliaCoordinates},
-    minigame::{
-        Description, ImageColor, Minigame, MinigameRoot, OnVariationEnable, StartTimer, Variation,
-        VariationSet,
-    },
-    parallel,
-    state::GameState,
+    minigame::prelude::{ControlsTransition, Transition},
+    prelude::*,
 };
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
@@ -18,13 +9,16 @@ use bevy_seedling::prelude::*;
 use rand::Rng;
 use std::f32::consts::TAU;
 
-pub fn plugin(app: &mut App) {
+pub fn matching_plugin(app: &mut App) {
     app.add_loading_state(
         LoadingState::new(GameState::Loading).load_collection::<MatchingAssets>(),
     )
     .add_systems(OnEnter(GameState::Playing), init_targets)
     .add_systems(OnEnter(Minigame::Matching), unlock_camera)
-    .add_systems(Update, reach_target.run_if(in_state(Minigame::Matching)));
+    .add_systems(
+        Update,
+        reach_target.run_if(in_state(Minigame::Matching).and(in_state(Transition::None))),
+    );
 }
 
 #[derive(AssetCollection, Resource)]
@@ -55,6 +49,8 @@ struct MatchingAssets {
     melo: Handle<AudioSample>,
 }
 
+const MAX_DIST: f32 = 8.0;
+
 #[derive(Component)]
 struct Target;
 
@@ -62,12 +58,10 @@ fn init_targets(
     mut commands: Commands,
     assets: Res<MatchingAssets>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
-    coords: JuliaCoordinates,
 ) {
     let targets = children![
         target(
             &mut commands,
-            &coords,
             assets.t0.clone(),
             assets.bong.clone(),
             assets.bands.clone(),
@@ -78,7 +72,6 @@ fn init_targets(
         ),
         target(
             &mut commands,
-            &coords,
             assets.t1.clone(),
             assets.rabbit.clone(),
             assets.contrast.clone(),
@@ -89,7 +82,6 @@ fn init_targets(
         ),
         target(
             &mut commands,
-            &coords,
             assets.t2.clone(),
             assets.bong.clone(),
             assets.star_ship.clone(),
@@ -100,7 +92,6 @@ fn init_targets(
         ),
         target(
             &mut commands,
-            &coords,
             assets.t3.clone(),
             assets.melo.clone(),
             assets.glitch.clone(),
@@ -115,13 +106,11 @@ fn init_targets(
         MinigameRoot,
         Minigame::Matching,
         DespawnOnExit(GameState::Playing),
-        Description::Wasd,
         children![(VariationSet, targets)],
     ));
 
     fn target(
         commands: &mut Commands,
-        coords: &JuliaCoordinates,
         image: Handle<Image>,
         song: Handle<AudioSample>,
         texture: Handle<Image>,
@@ -132,59 +121,93 @@ fn init_targets(
     ) -> impl Bundle {
         let dc = Vec2::from_angle(rng.random_range(0.0..TAU)) * r;
         let enable = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>,
+            move |root: In<Entity>,
                   mut commands: Commands,
                   fractal: Single<Entity, With<Fractal>>,
-                  camera: Single<Entity, With<Camera>>,
-                  music: Single<Entity, With<Music>>| {
+                  coords: JuliaCoordinates| {
                 commands.entity(*fractal).insert((
                     FractalTexture(texture.clone()),
                     CPlane(Vec2::new(cx, cy) + dc),
                 ));
 
-                commands.spawn((
-                    DespawnOnExit(Minigame::EnterWipe),
-                    ImageNode {
-                        image: image.clone(),
-                        ..default()
-                    },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(20.0),
-                        top: Val::Px(20.0),
-                        width: Val::Percent(35.0),
-                        ..default()
-                    },
-                    ImageColor(Color::WHITE.with_alpha(0.0)),
+                let image = commands
+                    .spawn((
+                        ImageNode {
+                            image: image.clone(),
+                            ..default()
+                        },
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(20.0),
+                            top: Val::Px(20.0),
+                            width: Val::Percent(35.0),
+                            ..default()
+                        },
+                        ImageColor(Color::WHITE.with_alpha(0.0)),
+                        DespawnOnExit(Minigame::Matching),
+                    ))
+                    .id();
+
+                commands.entity(*root).with_child((
+                    AnimationTarget(*fractal),
+                    animations![
+                        block_in_state(Transition::Exit),
+                        block_in_state(Transition::None),
+                        blocking_system(
+                            |target: Single<&Transform, With<Target>>,
+                             camera: Single<&Transform, With<Camera>>| {
+                                camera.translation.distance(target.translation) < MAX_DIST
+                            }
+                        ),
+                        (
+                            Duration(0.4),
+                            Keyframe(CPlane(Vec2::new(cx, cy))),
+                            Easing::SineInOut
+                        )
+                    ],
+                ));
+
+                commands.entity(*root).with_child((
+                    Target,
+                    coords.transform(cx, cy),
+                    // no lpf on music pool :(
+                    // MusicPool,
+                    PlaybackSpeed(1.0),
+                    SamplePlayer::new(song.clone())
+                        .with_volume(Volume::Linear(0.8))
+                        .looping(),
+                    sample_effects![LowPassNode {
+                        frequency: Lpf::distance(1.0, 1.0).0,
+                    }],
+                    Lpf::distance(1.0, 1.0),
+                    //
                     AnimationTarget::entity(),
                     animations![
-                        Duration(1.0),
+                        Duration(0.3),
                         (
+                            AnimationTarget(image),
                             Duration(1.25),
                             Keyframe(ImageColor(Color::WHITE)),
                             Easing::SineInOut
                         ),
-                        blocking_system(|state: Res<State<Minigame>>| {
-                            *state.get() != Minigame::Matching
-                        }),
+                        block_in_state(Transition::None),
+                        system(
+                            |mut camera: Single<&mut MovementSensitivity, With<Camera>>| {
+                                camera.0 = 0.0;
+                            }
+                        ),
                         parallel![
                             (
+                                AnimationTarget(image),
                                 Duration(0.3),
                                 Keyframe(ImageColor(Color::WHITE.with_alpha(0.0))),
                                 Easing::SineInOut
                             ),
                             (
-                                AnimationTarget(*camera),
-                                Duration(0.2),
-                                Keyframe(MovementSensitivity(0.0)),
-                                Easing::SineInOut
-                            ),
-                            (
-                                AnimationTarget(*music),
                                 Duration(0.2),
                                 Keyframe(PlaybackSpeed(0.0)),
                                 Easing::SineInOut
-                            )
+                            ),
                         ],
                     ],
                 ));
@@ -193,27 +216,12 @@ fn init_targets(
 
         (
             Variation,
-            StartTimer(8.0),
+            TimerDuration(8.0),
+            ControlsTransition::Wasd,
             enable,
-            Target,
-            Music,
-            coords.transform(cx, cy),
-            // no lpf on music pool :(
-            // MusicPool,
-            PlaybackSpeed(1.0),
-            SamplePlayer::new(song)
-                .with_volume(Volume::Linear(0.8))
-                .looping(),
-            sample_effects![LowPassNode {
-                frequency: 20_000.0
-            }],
-            Lpf(20_000.0),
         )
     }
 }
-
-#[derive(Component)]
-struct Music;
 
 fn reach_target(
     mut commands: Commands,
@@ -223,7 +231,8 @@ fn reach_target(
     let (transform, mut lpf) = target.into_inner();
     let dist = camera.translation.distance(transform.translation);
     *lpf = Lpf::distance(dist, 32.0);
-    if dist < 8.0 {
-        commands.set_state(Minigame::Success);
+    if dist < MAX_DIST {
+        // TODO: move to final solution
+        commands.run_system_cached(success);
     }
 }

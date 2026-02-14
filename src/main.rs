@@ -4,15 +4,32 @@ use bevy::{asset::AssetMetaCheck, prelude::*};
 use bevy_rand::prelude::WyRand;
 
 #[allow(unused)]
-mod animation;
-mod audio;
-mod camera;
-mod fractal;
-mod intro;
-mod minigame;
-mod state;
-mod text;
-mod transition;
+pub mod prelude {
+    pub use super::animation::*;
+    pub use super::audio::*;
+    pub use super::camera::*;
+    pub use super::fractal::*;
+    pub use super::intro::*;
+    pub use super::minigame::*;
+    pub use super::outro::*;
+    pub use super::state::*;
+    pub use super::text::*;
+    pub use super::tween::*;
+    pub use super::{animations, parallel};
+    pub use bevy_rand::{global::GlobalRng, prelude::WyRand};
+}
+
+#[allow(unused)]
+pub mod animation;
+pub mod audio;
+pub mod camera;
+pub mod fractal;
+pub mod intro;
+pub mod minigame;
+pub mod outro;
+pub mod state;
+pub mod text;
+pub mod tween;
 
 fn main() {
     let mut app = App::new();
@@ -35,19 +52,24 @@ fn main() {
                 ..default()
             }),
         bevy_seedling::SeedlingPlugin::default(),
-        bevy_rand::plugin::EntropyPlugin::<WyRand>::with_seed(69u64.to_le_bytes()),
+        #[cfg(feature = "dev")]
+        bevy_rand::plugin::EntropyPlugin::<WyRand>::default(),
+        // bevy_rand::plugin::EntropyPlugin::<WyRand>::with_seed(69u64.to_le_bytes()),
+        #[cfg(not(feature = "dev"))]
+        bevy_rand::plugin::EntropyPlugin::<WyRand>::default(),
         bevy_pretty_text::prelude::PrettyTextPlugin,
     ))
     .add_plugins((
-        state::plugin,
-        minigame::plugin,
-        fractal::plugin,
-        audio::plugin,
-        intro::plugin,
-        animation::plugin,
-        text::plugin,
-        camera::plugin,
-        transition::plugin,
+        state::state_plugin,
+        minigame::minigame_plugin,
+        fractal::fractal_plugin,
+        audio::audio_plugin,
+        intro::intro_plugin,
+        animation::animation_plugin,
+        text::text_plugin,
+        camera::camera_plugin,
+        outro::outro_plugin,
+        tween::tween_plugin,
     ))
     .add_systems(Startup, gizmos_line_width);
 

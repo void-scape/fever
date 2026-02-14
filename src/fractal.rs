@@ -11,7 +11,7 @@ use bevy::{
 };
 use fever_macros::Lerp;
 
-pub fn plugin(app: &mut App) {
+pub fn fractal_plugin(app: &mut App) {
     #[cfg(feature = "dev")]
     app.add_systems(Update, log_params);
 

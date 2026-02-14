@@ -1,11 +1,11 @@
 use bevy::{
     ecs::{component::Mutable, lifecycle::HookContext, world::DeferredWorld},
     prelude::*,
-    state::state::FreelyMutableState,
+    state::state::{FreelyMutableState, StateTransitionSystems},
 };
 use std::{any::TypeId, collections::HashSet};
 
-pub fn plugin(app: &mut App) {
+pub fn animation_plugin(app: &mut App) {
     app.add_observer(active)
         .add_observer(advance)
         .add_observer(animation_target)
@@ -21,6 +21,10 @@ pub fn plugin(app: &mut App) {
                 despawn_finished,
             )
                 .chain(),
+        )
+        .add_systems(
+            StateTransition,
+            (drain_keyframe_queue, drain_delta_queue).after(StateTransitionSystems::EnterSchedules),
         );
 
     app.configure_sets(
@@ -39,6 +43,10 @@ pub fn set_state<S: FreelyMutableState + Clone>(state: S) -> System {
     system(move |mut commands: Commands| {
         commands.set_state(state.clone());
     })
+}
+
+pub fn block_in_state<S: States + Clone + PartialEq>(state: S) -> System {
+    blocking_system(move |s: Option<Res<State<S>>>| s.is_none_or(|s| s.get() != &state.clone()))
 }
 
 #[derive(Component)]
@@ -340,25 +348,34 @@ fn one_shot_system(
 #[component(on_insert = schedule_keyframe::<T>)]
 pub struct Keyframe<T: Component<Mutability = Mutable> + Lerp + Clone>(pub T);
 
-#[derive(Default, Resource, Deref, DerefMut)]
-struct ScheduledKeyframes(HashSet<TypeId>);
+#[derive(Default, Resource)]
+struct ScheduledKeyframes {
+    queued: Vec<Box<dyn FnMut(&mut World) + Send + Sync>>,
+    existing: HashSet<TypeId>,
+}
 
 fn schedule_keyframe<T: Component<Mutability = Mutable> + Lerp + Clone>(
     mut world: DeferredWorld,
     _: HookContext,
 ) {
     world.commands().queue(|world: &mut World| {
-        if world
-            .resource_mut::<ScheduledKeyframes>()
-            .insert(TypeId::of::<T>())
-        {
-            world.add_observer(start::<T>);
-            world.add_observer(end::<T>);
-            world.schedule_scope(Update, |_, schedule| {
-                schedule.add_systems(keyframe::<T>.in_set(AnimationSystems::Interpolate));
-            });
+        let mut key_frames = world.resource_mut::<ScheduledKeyframes>();
+        if key_frames.existing.insert(TypeId::of::<T>()) {
+            key_frames.queued.push(Box::new(|world: &mut World| {
+                world.add_observer(start::<T>);
+                world.add_observer(end::<T>);
+                world.schedule_scope(Update, |_, schedule| {
+                    schedule.add_systems(keyframe::<T>.in_set(AnimationSystems::Interpolate));
+                });
+            }));
         }
     });
+}
+
+fn drain_keyframe_queue(mut key_frames: ResMut<ScheduledKeyframes>, mut commands: Commands) {
+    for queued in key_frames.queued.drain(..) {
+        commands.queue(queued);
+    }
 }
 
 fn keyframe<T: Component<Mutability = Mutable> + Lerp + Clone>(
@@ -395,25 +412,34 @@ fn keyframe<T: Component<Mutability = Mutable> + Lerp + Clone>(
 #[component(on_insert = schedule_delta::<T>)]
 pub struct Delta<T: Component<Mutability = Mutable> + Lerp + Clone>(pub T);
 
-#[derive(Default, Resource, Deref, DerefMut)]
-struct ScheduledDeltas(HashSet<TypeId>);
+#[derive(Default, Resource)]
+struct ScheduledDeltas {
+    queued: Vec<Box<dyn FnMut(&mut World) + Send + Sync>>,
+    existing: HashSet<TypeId>,
+}
 
 fn schedule_delta<T: Component<Mutability = Mutable> + Lerp + Clone>(
     mut world: DeferredWorld,
     _: HookContext,
 ) {
     world.commands().queue(|world: &mut World| {
-        if world
-            .resource_mut::<ScheduledDeltas>()
-            .insert(TypeId::of::<T>())
-        {
-            // TODO: doubling start here with keyframes
-            world.add_observer(start::<T>);
-            world.schedule_scope(Update, |_, schedule| {
-                schedule.add_systems(delta::<T>.in_set(AnimationSystems::Interpolate));
-            });
+        let mut deltas = world.resource_mut::<ScheduledDeltas>();
+        if deltas.existing.insert(TypeId::of::<T>()) {
+            deltas.queued.push(Box::new(|world: &mut World| {
+                // TODO: doubling start here with keyframes
+                world.add_observer(start::<T>);
+                world.schedule_scope(Update, |_, schedule| {
+                    schedule.add_systems(delta::<T>.in_set(AnimationSystems::Interpolate));
+                });
+            }));
         }
     });
+}
+
+fn drain_delta_queue(mut deltas: ResMut<ScheduledDeltas>, mut commands: Commands) {
+    for queued in deltas.queued.drain(..) {
+        commands.queue(queued);
+    }
 }
 
 fn delta<T: Component<Mutability = Mutable> + Lerp + Clone>(

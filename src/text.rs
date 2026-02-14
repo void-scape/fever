@@ -1,11 +1,16 @@
 use crate::animation::*;
 use crate::minigame::MinigameAssets;
+use crate::state::GameState;
 use bevy::prelude::*;
 use bevy_pretty_text::prelude::*;
 use bevy_seedling::prelude::*;
 
-pub fn plugin(app: &mut App) {
-    app.add_observer(advance).add_observer(glyph);
+pub fn text_plugin(app: &mut App) {
+    app.init_resource::<TextGlyphSfx>()
+        .add_observer(advance)
+        .add_observer(glyph)
+        .add_systems(OnEnter(GameState::Intro), narrator_glyph)
+        .add_systems(OnEnter(GameState::Playing), narrator_glyph);
 }
 
 fn text_node(text: impl Bundle) -> impl Bundle {
@@ -117,10 +122,21 @@ fn advance(_: On<TypewriterFinished>, mut commands: Commands) {
     commands.spawn(Advance);
 }
 
-fn glyph(revealed: On<Revealed<Char>>, mut commands: Commands, assets: Res<MinigameAssets>) {
+#[derive(Default, Resource)]
+pub struct TextGlyphSfx(pub Handle<AudioSample>);
+
+pub fn narrator_glyph(mut glyph: ResMut<TextGlyphSfx>, assets: Res<MinigameAssets>) {
+    glyph.0 = assets.narrator_glyph.clone();
+}
+
+pub fn presence_glyph(mut glyph: ResMut<TextGlyphSfx>, assets: Res<MinigameAssets>) {
+    glyph.0 = assets.presence_glyph.clone();
+}
+
+fn glyph(revealed: On<Revealed<Char>>, mut commands: Commands, glyph: Res<TextGlyphSfx>) {
     if revealed.event().text != " " {
         commands.spawn((
-            SamplePlayer::new(assets.glyph.clone()).with_volume(Volume::Linear(0.8)),
+            SamplePlayer::new(glyph.0.clone()).with_volume(Volume::Linear(0.8)),
             RandomPitch::new(0.05),
         ));
     }

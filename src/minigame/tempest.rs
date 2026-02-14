@@ -1,9 +1,6 @@
 use crate::{
-    audio::Lpf,
-    camera::{force_camera_origin, lock_camera, unforce_camera_origin},
-    fractal::{BurningShip, CPlane, Fractal, FractalTexture, Mandelbrot, Zoom},
-    minigame::{Description, Minigame, MinigameRoot, OnVariationEnable, Variation, VariationSet},
-    state::GameState,
+    minigame::prelude::{ControlsTransition, Transition},
+    prelude::*,
 };
 use bevy::{color::palettes::css::YELLOW, prelude::*};
 use bevy_asset_loader::prelude::*;
@@ -12,7 +9,7 @@ use bevy_seedling::prelude::*;
 use rand::Rng;
 use std::f32::consts::{PI, TAU};
 
-pub fn plugin(app: &mut App) {
+pub fn tempest_plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<TempestAssets>())
         .add_systems(OnEnter(GameState::Playing), init_targets)
         .add_systems(OnEnter(Minigame::Tempest), lock_camera)
@@ -20,17 +17,19 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnExit(Minigame::Tempest), unforce_camera_origin)
         .add_systems(
             Update,
-            (
-                spawner,
-                (player, enemy, zoom),
-                (lpf, collision),
-                check_success,
-            )
+            (player, spawner, (enemy, zoom), lpf)
                 .chain()
                 .run_if(in_state(Minigame::Tempest)),
+        )
+        .add_systems(
+            Update,
+            (collision, check_success)
+                .chain()
+                .run_if(in_state(Transition::None).and(in_state(Minigame::Tempest))),
         );
 }
 
+// TODO: crash.ogg
 #[derive(AssetCollection, Resource)]
 struct TempestAssets {
     #[asset(path = "images/fractals/last-breath.png")]
@@ -116,7 +115,6 @@ fn init_targets(
         MinigameRoot,
         DespawnOnExit(GameState::Playing),
         Minigame::Tempest,
-        Description::Wasd,
         children![(VariationSet, scenes)],
     ));
 
@@ -130,7 +128,9 @@ fn init_targets(
         T: Bundle,
     {
         let on_enable = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>, mut commands: Commands, fractal: Single<Entity, With<Fractal>>| {
+            move |root: In<Entity>,
+                  mut commands: Commands,
+                  fractal: Single<Entity, With<Fractal>>| {
                 commands.entity(*fractal).insert((
                     FractalTexture(texture.clone()),
                     CPlane(Vec2::new(-1.741702, -0.052180)),
@@ -139,26 +139,23 @@ fn init_targets(
                     Zoom(0.05),
                 ));
 
-                commands.spawn((
-                    DespawnOnExit(Minigame::EnterWipe),
+                commands.entity(*root).with_child((
                     Transform::default(),
                     Visibility::default(),
                     colliders(),
+                    //
+                    SamplePlayer::new(music.clone())
+                        .with_volume(Volume::Linear(0.8))
+                        .looping(),
+                    sample_effects![LowPassNode {
+                        frequency: Lpf::distance(1.0, 1.0).0,
+                    }],
+                    Lpf::distance(1.0, 1.0),
                 ));
             },
         ));
-        (
-            Variation,
-            SceneRoot,
-            on_enable,
-            SamplePlayer::new(music)
-                .with_volume(Volume::Linear(0.8))
-                .looping(),
-            sample_effects![LowPassNode {
-                frequency: 20_000.0
-            }],
-            Lpf(20_000.0),
-        )
+
+        (Variation, SceneRoot, on_enable, ControlsTransition::Wasd)
     }
 }
 
@@ -204,7 +201,7 @@ fn spawner(mut commands: Commands, mut query: Query<(Entity, &mut Spawner)>, tim
                     Enemy { angle, vel: 0.0 },
                     Sprite::from_color(Color::WHITE, Vec2::new(50.0, 50.0)),
                     Transform::from_xyz(0.0, 0.0, 1.0),
-                    DespawnOnExit(Minigame::EnterWipe),
+                    DespawnOnExit(Minigame::Tempest),
                 ));
             }
             spawner.wave += 1;
@@ -245,15 +242,16 @@ fn lpf(mut lpf: Single<&mut Lpf, With<SceneRoot>>, enemies: Query<&Transform, Wi
         .map(|t| (t.translation.xy().length_squared() - RADIUS * RADIUS).abs())
         .reduce(f32::min);
     if let Some(closest) = closest {
-        **lpf = Lpf::distance(closest.sqrt() * 1.5, RADIUS);
+        **lpf = Lpf::distance(closest.sqrt() * 1.3, RADIUS);
     }
 }
 
 fn collision(
     mut commands: Commands,
-    player: Single<&Transform, With<Player>>,
+    player: Single<(Entity, &Transform), With<Player>>,
     enemies: Query<&Transform, With<Enemy>>,
 ) {
+    let (entity, player) = player.into_inner();
     for transform in enemies.iter() {
         if transform
             .translation
@@ -261,7 +259,8 @@ fn collision(
             .distance_squared(player.translation.xy())
             < 15.0 * 15.0
         {
-            commands.set_state(Minigame::Failure);
+            commands.run_system_cached(failure);
+            commands.entity(entity).despawn();
             return;
         }
     }
@@ -273,6 +272,6 @@ fn check_success(
     spawner: Option<Single<(), With<Spawner>>>,
 ) {
     if spawner.is_none() && enemies.is_empty() {
-        commands.set_state(Minigame::Success);
+        commands.run_system_cached(success);
     }
 }

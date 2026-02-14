@@ -1,33 +1,26 @@
-use crate::{
-    animation::*,
-    animations,
-    audio::Lpf,
-    camera::lock_camera,
-    fractal::{Fractal, FractalTexture, JuliaCoordinates, Mandelbrot, Zoom, cmul},
-    minigame::{
-        Description, Minigame, MinigameRoot, OnVariationEnable, StartTimer, Variation, VariationSet,
-    },
-    state::GameState,
-};
-use bevy::{
-    color::palettes::tailwind::GREEN_800, ecs::entity_disabling::Disabled, prelude::*,
-    window::PrimaryWindow,
-};
+use crate::minigame::prelude::{ControlsTransition, Transition, fade_volume_transition};
+use crate::prelude::*;
+use bevy::prelude::*;
+use bevy::{color::palettes::tailwind::GREEN_800, window::PrimaryWindow};
 use bevy_asset_loader::prelude::*;
 use bevy_seedling::prelude::*;
 use fever_macros::Lerp;
 
 const DEBUGGER: bool = false;
 
-pub fn plugin(app: &mut App) {
+pub fn path_plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<PathAssets>())
         .add_systems(OnEnter(GameState::Playing), init_targets)
-        .add_systems(OnEnter(Minigame::Path), (lock_camera, fade_opacity))
+        .add_systems(
+            OnEnter(Minigame::Path),
+            (lock_camera, fade_opacity, force_camera_origin),
+        )
+        .add_systems(OnExit(Minigame::Path), unforce_camera_origin)
         .add_systems(
             Update,
             (
                 intersect_targets,
-                check_success.run_if(in_state(Minigame::Path)),
+                check_success.run_if(in_state(Minigame::Path).and(in_state(Transition::None))),
             )
                 .chain(),
         );
@@ -40,11 +33,11 @@ fn fade_opacity(mut commands: Commands) {
     commands.spawn((
         PathOpacity(0.0),
         AnimationTarget::entity(),
-        DespawnOnExit(Minigame::EnterWipe),
+        DespawnFinished,
         animations![
             (Duration(2.0), Keyframe(PathOpacity(1.0)), Easing::SineInOut),
-            blocking_system(|state: Res<State<Minigame>>| { *state.get() != Minigame::Path }),
-            (Duration(0.3), Keyframe(PathOpacity(0.0)), Easing::SineInOut),
+            block_in_state(Transition::None),
+            (Duration(0.2), Keyframe(PathOpacity(0.0)), Easing::SineInOut),
         ],
     ));
 }
@@ -71,6 +64,7 @@ struct PathAssets {
 
 #[derive(Component)]
 #[require(Transform)]
+#[require(LastC)]
 struct TargetRoot;
 
 #[derive(Component)]
@@ -84,14 +78,10 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
             assets.god.clone(),
             assets.zap.clone(),
             children![
-                (Disabled, Target(10.0), c.transform(0.12925337, 0.7643622)),
-                (Disabled, Target(10.0), c.transform(-0.43770975, 0.9620131)),
-                (
-                    Disabled,
-                    Target(10.0),
-                    c.transform(-0.60180664, -0.07361984)
-                ),
-                (Disabled, Target(10.0), c.transform(0.48981094, 0.8597144)),
+                (Target(10.0), c.transform(0.12925337, 0.7643622)),
+                (Target(10.0), c.transform(-0.43770975, 0.9620131)),
+                (Target(10.0), c.transform(-0.60180664, -0.07361984)),
+                (Target(10.0), c.transform(0.48981094, 0.8597144)),
             ],
         ),
         target(
@@ -100,11 +90,11 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
             assets.star_ship.clone(),
             assets.power_life.clone(),
             children![
-                (Disabled, Target(10.0), c.transform(0.39360046, 0.22105403)),
-                (Disabled, Target(10.0), c.transform(0.50511175, 0.39056396)),
-                (Disabled, Target(10.0), c.transform(0.48820877, 0.6109084)),
-                (Disabled, Target(10.0), c.transform(0.26229095, 0.81796634)),
-                (Disabled, Target(10.0), c.transform(-0.21299359, 0.64798725)),
+                (Target(10.0), c.transform(0.39360046, 0.22105403)),
+                (Target(10.0), c.transform(0.50511175, 0.39056396)),
+                (Target(10.0), c.transform(0.48820877, 0.6109084)),
+                (Target(10.0), c.transform(0.26229095, 0.81796634)),
+                (Target(10.0), c.transform(-0.21299359, 0.64798725)),
             ],
         ),
         target(
@@ -113,19 +103,11 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
             assets.contrast.clone(),
             assets.zap.clone(),
             children![
-                (Disabled, Target(10.0), c.transform(-0.3643189, -0.6188507)),
-                (Disabled, Target(10.0), c.transform(-0.5354081, -0.6015929)),
-                (
-                    Disabled,
-                    Target(10.0),
-                    c.transform(-0.16873938, -0.64779276)
-                ),
-                (
-                    Disabled,
-                    Target(10.0),
-                    c.transform(-0.60802084, -0.17068857)
-                ),
-                (Disabled, Target(10.0), c.transform(-0.4474144, 0.020050056)),
+                (Target(10.0), c.transform(-0.3643189, -0.6188507)),
+                (Target(10.0), c.transform(-0.5354081, -0.6015929)),
+                (Target(10.0), c.transform(-0.16873938, -0.64779276)),
+                (Target(10.0), c.transform(-0.60802084, -0.17068857)),
+                (Target(10.0), c.transform(-0.4474144, 0.020050056)),
             ],
         ),
         target(
@@ -134,22 +116,10 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
             assets.star_ship.clone(),
             assets.power_life.clone(),
             children![
-                (
-                    Disabled,
-                    Target(10.0),
-                    c.transform(0.074550614, -0.54670715)
-                ),
-                (
-                    Disabled,
-                    Target(10.0),
-                    c.transform(-0.21527101, -0.62417215)
-                ),
-                (
-                    Disabled,
-                    Target(10.0),
-                    c.transform(0.073577866, -0.39602274)
-                ),
-                (Disabled, Target(10.0), c.transform(-0.2700196, -0.27401727)),
+                (Target(10.0), c.transform(0.074550614, -0.54670715)),
+                (Target(10.0), c.transform(-0.21527101, -0.62417215)),
+                (Target(10.0), c.transform(0.073577866, -0.39602274)),
+                (Target(10.0), c.transform(-0.2700196, -0.27401727)),
             ],
         ),
     ];
@@ -158,7 +128,6 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
         MinigameRoot,
         DespawnOnExit(GameState::Playing),
         Minigame::Path,
-        Description::Mouse,
         children![(VariationSet, variations)],
     ));
 
@@ -169,34 +138,43 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
         music: Handle<AudioSample>,
         targets: impl Bundle,
     ) -> impl Bundle {
+        let mut targets = Some(targets);
         let on_start = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>,
+            move |root: In<Entity>,
                   mut commands: Commands,
-                  fractal: Single<Entity, With<Fractal>>,
-                  mut camera: Single<&mut Transform, With<Camera>>| {
-                camera.translation = Vec3::ZERO;
+                  fractal: Single<Entity, With<Fractal>>| {
                 commands.entity(*fractal).insert((
                     FractalTexture(texture.clone()),
                     Mandelbrot(1),
                     Zoom(1.5),
                 ));
+
+                if let Some(targets) = targets.take() {
+                    commands.entity(*root).with_child((
+                        TargetRoot,
+                        targets,
+                        SamplePlayer::new(music.clone())
+                            .with_volume(Volume::Linear(0.8))
+                            .looping(),
+                        sample_effects![
+                            VolumeNode::default(),
+                            LowPassNode {
+                                frequency: Lpf::distance(1.0, 1.0).0,
+                            }
+                        ],
+                        Lpf::distance(1.0, 1.0),
+                        fade_volume_transition(),
+                    ));
+                }
             },
         ));
 
         let time = if DEBUGGER { 9999999.0 } else { time };
         (
             Variation,
-            StartTimer(time),
-            TargetRoot,
-            targets,
+            TimerDuration(time),
+            ControlsTransition::Mouse,
             on_start,
-            SamplePlayer::new(music)
-                .with_volume(Volume::Linear(0.8))
-                .looping(),
-            sample_effects![LowPassNode {
-                frequency: Lpf::distance(1.0, 1.0).0,
-            }],
-            Lpf::distance(1.0, 1.0),
         )
     }
 }
@@ -204,16 +182,21 @@ fn init_targets(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordin
 #[derive(Component)]
 struct Hovered;
 
+#[derive(Default, Component)]
+struct LastC(Vec2);
+
 fn intersect_targets(
     mut commands: Commands,
     mut gizmos: Gizmos,
     targets: Query<(Entity, &Target, &Transform, Has<Hovered>)>,
+    mut last_c: Single<&mut LastC, With<TargetRoot>>,
     mut lpf: Single<&mut Lpf, With<TargetRoot>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     assets: Res<PathAssets>,
     coords: JuliaCoordinates,
     path_opacity: Single<&PathOpacity>,
+    state: Res<State<Transition>>,
     //
     input: Res<ButtonInput<KeyCode>>,
     mut position: Local<Vec2>,
@@ -237,7 +220,13 @@ fn intersect_targets(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate())
     {
-        let mut c = coords.julia2(w);
+        let mut c = if *state.get() == Transition::Enter {
+            last_c.0
+        } else {
+            let c = coords.julia2(w);
+            last_c.0 = c;
+            c
+        };
 
         if DEBUGGER {
             if input.pressed(KeyCode::ShiftLeft) {
@@ -271,7 +260,7 @@ fn intersect_targets(
             );
         }
 
-        if path_opacity.0 < 1.0 {
+        if path_opacity.0 < 0.5 {
             return;
         }
 
@@ -320,7 +309,8 @@ fn check_success(
     mut commands: Commands,
     targets: Query<(Entity, &Target, &Transform), Without<Hovered>>,
 ) {
+    // TODO: freeze points
     if targets.is_empty() {
-        commands.set_state(Minigame::Success);
+        commands.run_system_cached(success);
     }
 }

@@ -1,9 +1,10 @@
-use crate::animation::AnimationSystems;
+use crate::prelude::*;
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 use fever_macros::Lerp;
+use std::f32::consts::PI;
 
-pub fn plugin(app: &mut App) {
+pub fn audio_plugin(app: &mut App) {
     app.add_systems(
         Update,
         (lpf, playback_speed, linear_volume).after(AnimationSystems::Interpolate),
@@ -19,6 +20,14 @@ impl Default for LinearVolume {
     }
 }
 
+pub fn fade_volume(duration: f32, vol: f32) -> impl Bundle {
+    (
+        Duration(duration),
+        Keyframe(LinearVolume(vol)),
+        Easing::SineInOut,
+    )
+}
+
 fn linear_volume(
     sample_players: Query<(&SampleEffects, &LinearVolume), Changed<LinearVolume>>,
     mut volume: Query<&mut VolumeNode>,
@@ -30,6 +39,7 @@ fn linear_volume(
 }
 
 #[derive(Clone, Copy, Component, Lerp)]
+#[require(LowPass::new(20_000.0, 44_100.0))]
 pub struct Lpf(pub f32);
 
 impl Default for Lpf {
@@ -45,11 +55,11 @@ impl Lpf {
 }
 
 fn lpf(
-    sample_players: Query<(&SampleEffects, &Lpf), Changed<Lpf>>,
+    mut sample_players: Query<(&SampleEffects, &Lpf, &mut LowPass), Changed<Lpf>>,
     mut lpf: Query<&mut LowPassNode>,
 ) -> Result {
-    for (effects, param) in &sample_players {
-        lpf.get_effect_mut(effects)?.frequency = param.0;
+    for (effects, param, mut lp) in sample_players.iter_mut() {
+        lpf.get_effect_mut(effects)?.frequency = lp.process(param.0);
     }
     Ok(())
 }
@@ -71,35 +81,35 @@ fn playback_speed(
     }
 }
 
-// // Implementation taken from the lovely DaisySP:
-// // https://github.com/electro-smith/DaisySP/blob/master/Source/Filters/onepole.h
-// #[derive(Component)]
-// pub struct LowPass {
-//     g: f32,
-//     gi: f32,
-//     state: f32,
-// }
-//
-// impl LowPass {
-//     pub fn new(freq: f32, sample_rate: f32) -> Self {
-//         let mut slf = Self {
-//             g: 0.0,
-//             gi: 0.0,
-//             state: 0.0,
-//         };
-//         slf.set_freq(freq, sample_rate);
-//         slf
-//     }
-//
-//     pub fn set_freq(&mut self, freq: f32, sample_rate: f32) {
-//         let clipped_freq = (freq / sample_rate).clamp(0.0, 0.497);
-//         self.g = (PI * clipped_freq).tan();
-//         self.gi = 1.0 / (1.0 + self.g);
-//     }
-//
-//     pub fn process(&mut self, sample: f32) -> f32 {
-//         let lp = (self.g * sample + self.state) * self.gi;
-//         self.state = self.g * (sample - lp) + lp;
-//         lp
-//     }
-// }
+// Implementation taken from the lovely DaisySP:
+// https://github.com/electro-smith/DaisySP/blob/master/Source/Filters/onepole.h
+#[derive(Component)]
+pub struct LowPass {
+    g: f32,
+    gi: f32,
+    state: f32,
+}
+
+impl LowPass {
+    pub fn new(freq: f32, sample_rate: f32) -> Self {
+        let mut slf = Self {
+            g: 0.0,
+            gi: 0.0,
+            state: 0.0,
+        };
+        slf.set_freq(freq, sample_rate);
+        slf
+    }
+
+    pub fn set_freq(&mut self, freq: f32, sample_rate: f32) {
+        let clipped_freq = (freq / sample_rate).clamp(0.0, 0.497);
+        self.g = (PI * clipped_freq).tan();
+        self.gi = 1.0 / (1.0 + self.g);
+    }
+
+    pub fn process(&mut self, sample: f32) -> f32 {
+        let lp = (self.g * sample + self.state) * self.gi;
+        self.state = self.g * (sample - lp) + lp;
+        lp
+    }
+}

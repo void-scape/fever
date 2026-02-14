@@ -28,8 +28,8 @@
 @group(0) @binding(1) var screen_sampler: sampler;
 
 struct TransitionUniform {
-    pixelation: vec2<f32>,
     color: vec4<f32>,
+    pixelation: vec2<f32>,
     progress: f32,
     speed: f32,
     zoom: f32,
@@ -37,9 +37,6 @@ struct TransitionUniform {
     color_threshold: f32,
     seed: f32,
 	time: f32,
-#ifdef SIXTEEN_BYTE_ALIGNMENT
-    _webgl2_padding: vec3<f32>
-#endif
 };
 
 @group(0) @binding(2) var<uniform> args: TransitionUniform;

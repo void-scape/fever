@@ -1,15 +1,4 @@
-use crate::animation::*;
-use crate::audio::LinearVolume;
-use crate::audio::Lpf;
-use crate::audio::PlaybackSpeed;
-use crate::camera::MovementSensitivity;
-use crate::fractal::*;
-use crate::minigame::ImageColor;
-use crate::minigame::MinigameAssets;
-use crate::minigame::UiTranslationPx;
-use crate::state::GameState;
-use crate::text::*;
-use crate::{animations, parallel};
+use crate::prelude::*;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -18,14 +7,10 @@ use bevy_pretty_text::prelude::*;
 use bevy_seedling::prelude::*;
 use fever_macros::Lerp;
 
-pub fn plugin(app: &mut App) {
+pub fn intro_plugin(app: &mut App) {
     #[cfg(feature = "dev")]
-    app.add_systems(
-        OnEnter(GameState::Intro),
-        |mut scale: ResMut<DeltaScale>| scale.0 = 100.0,
-    )
-    .add_systems(OnExit(GameState::Intro), |mut scale: ResMut<DeltaScale>| {
-        scale.0 = 1.0
+    app.add_systems(OnEnter(GameState::Intro), |mut commands: Commands| {
+        commands.set_state(GameState::Playing);
     });
 
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<IntroAssets>())
@@ -89,7 +74,7 @@ fn fade(mut commands: Commands, fractal: Single<Entity, With<Fractal>>, assets: 
         AnimationTarget::entity(),
         animations![
             (
-                Duration(8.0),
+                Duration(6.0),
                 Keyframe(LinearVolume(1.0)),
                 Easing::SineInOut
             ),
@@ -124,7 +109,7 @@ fn fade(mut commands: Commands, fractal: Single<Entity, With<Fractal>>, assets: 
         AnimationTarget(*fractal),
         DespawnFinished,
         animations![
-            (Duration(8.0), Keyframe(Opacity(1.0)), Easing::SineInOut),
+            (Duration(6.0), Keyframe(Opacity(1.0)), Easing::SineInOut),
             (Duration(8.0), Keyframe(Iterations(20.0)), Easing::SineInOut),
             (
                 Duration(dur),
@@ -324,8 +309,11 @@ fn flavor_text(mut commands: Commands) {
                         .insert((Iterations(0.0), FractalTexture(assets.odd_julia.clone())));
                 }
             ),
-            await_input(pretty!(
-                "|1|How long have you been there,|0.5|<0.85> [watching me](glitch, red)?"
+            await_input((
+                FadeIn::default(),
+                pretty!(
+                    "|1|How long have [you](red) been there,|0.5|<0.85> [watching me](glitch)?"
+                )
             )),
             system(
                 |mut texture: Single<&mut FractalTexture, With<Fractal>>,
@@ -333,7 +321,10 @@ fn flavor_text(mut commands: Commands) {
                     texture.0 = assets.odd_julia.clone();
                 }
             ),
-            await_finish(pretty!("Do you|0.1| hate [me](glitch, red)?|0.25|")),
+            await_finish((
+                FadeIn::default(),
+                pretty!("Do [you](red)|0.1| [hate](glitch) me?|0.25|")
+            )),
             system(
                 |mut texture: Single<&mut FractalTexture, With<Fractal>>,
                  assets: Res<IntroAssets>| {
@@ -343,9 +334,13 @@ fn flavor_text(mut commands: Commands) {
             system(|mut opacity: Single<&mut Opacity, With<Fractal>>| {
                 opacity.0 = 0.0;
             }),
-            await_input(pretty!(
-                "|1|<0.9>I move my hand over you|0.25|<1.15> but it<1> does not block your \
-                <0.8>[bleeding glow](glitch, red).|1| You must be|0.25|<0.75> imaginary."
+            await_input((
+                FadeIn::default(),
+                pretty!(
+                    "|1|<0.9>I move my hand over [you](red)|0.25|<1.15> but it<1> \
+                    does not block [your](red) \
+                    <0.8>[bleeding glow](glitch).|1| [You](red) must be|0.25|<0.75> imaginary."
+                )
             )),
             set_state(GameState::Playing),
         ],

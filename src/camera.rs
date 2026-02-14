@@ -2,19 +2,33 @@ use crate::{
     animation::AnimationSystems,
     fractal::{CPlane, Fractal, FractalMesh, JuliaCoordinates},
     state::GameState,
-    transition::Transition,
 };
-use bevy::{prelude::*, render::view::Hdr};
+use bevy::{
+    color::palettes::css::RED,
+    core_pipeline::{
+        core_2d::graph::Node2d,
+        fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin},
+    },
+    prelude::*,
+    render::{
+        extract_component::ExtractComponent,
+        render_graph::{InternedRenderLabel, RenderLabel},
+        render_resource::ShaderType,
+        view::Hdr,
+    },
+};
 use fever_macros::Lerp;
 
-pub fn plugin(app: &mut App) {
+pub fn camera_plugin(app: &mut App) {
     app.add_systems(OnExit(GameState::Loading), spawn)
         .add_systems(
             Update,
             move_camera
                 .after(AnimationSystems::Interpolate)
                 .run_if(in_state(GameState::Playing)),
-        );
+        )
+        .add_plugins(FullscreenMaterialPlugin::<CameraTransition>::default())
+        .add_systems(Update, transition_progress);
 }
 
 fn spawn(mut commands: Commands) {
@@ -22,7 +36,7 @@ fn spawn(mut commands: Commands) {
         Camera2d,
         MovementSensitivity::default(),
         Hdr,
-        Transition::default(),
+        CameraTransition::default(),
     ));
 }
 
@@ -76,4 +90,65 @@ fn move_camera(
     let w = coords.world2(cplane.0);
     transform.translation.x = w.x;
     transform.translation.y = w.y;
+}
+
+#[derive(Default, Clone, Copy, Lerp, Component, Deref, DerefMut)]
+pub struct CameraTransitionProgress(pub f32);
+
+fn transition_progress(
+    time: Res<Time>,
+    args: Single<
+        (&mut CameraTransition, &CameraTransitionProgress),
+        Changed<CameraTransitionProgress>,
+    >,
+) {
+    let (mut transition, progress) = args.into_inner();
+    transition.time += time.delta_secs();
+    transition.progress = progress.0;
+    transition.background_threshold = (1.0 - progress.0 * 2.0).abs() - 0.5;
+    transition.color_threshold = (-4.0 + progress.0 * 8.0).abs().min(1.0) * 0.48;
+}
+
+#[derive(Clone, Copy, Component, ExtractComponent, ShaderType)]
+#[require(CameraTransitionProgress)]
+pub struct CameraTransition {
+    color: LinearRgba,
+    pixelation: Vec2,
+    progress: f32,
+    speed: f32,
+    zoom: f32,
+    background_threshold: f32,
+    color_threshold: f32,
+    seed: f32,
+    time: f32,
+}
+
+impl Default for CameraTransition {
+    fn default() -> Self {
+        Self {
+            pixelation: Vec2::splat(1.0),
+            color: RED.into(),
+            progress: 0.0,
+            speed: 0.1,
+            zoom: 2.0,
+            background_threshold: 0.0,
+            color_threshold: 0.0,
+            seed: 420.0,
+            time: 0.0,
+        }
+    }
+}
+
+impl FullscreenMaterial for CameraTransition {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        "shaders/transition.wgsl".into()
+    }
+
+    fn node_edges() -> Vec<InternedRenderLabel> {
+        vec![
+            Node2d::Tonemapping.intern(),
+            Self::node_label().intern(),
+            Node2d::EndMainPassPostProcessing.intern(),
+        ]
+    }
 }
