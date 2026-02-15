@@ -134,7 +134,7 @@ new_type_param!(Exponent, f32, exponent, 2.0);
 #[derive(Component)]
 pub struct FractalMesh;
 
-const MESH_SIZE: f32 = 1024.0;
+pub const MESH_SIZE: f32 = 1024.0;
 
 fn spawn(
     mut commands: Commands,

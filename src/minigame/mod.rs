@@ -313,6 +313,9 @@ pub enum ControlsTransition {
     Space,
 }
 
+#[derive(Component)]
+pub struct ControlTips(pub &'static str);
+
 #[derive(Debug, Component)]
 #[require(TransitionDuration)]
 pub struct CutTransition;
@@ -336,6 +339,7 @@ fn run_transition(
     transitions: Query<(
         Option<&ControlsTransition>,
         Option<&CutTransition>,
+        Option<&ControlTips>,
         &TransitionDuration,
     )>,
     camera: Single<Entity, With<CameraTransition>>,
@@ -344,7 +348,7 @@ fn run_transition(
     assets: Res<MinigameAssets>,
 ) {
     let runner = run.get(inserted.entity).unwrap();
-    let (controls, cut, duration) = transitions.get(inserted.entity).unwrap();
+    let (controls, cut, tips, duration) = transitions.get(inserted.entity).unwrap();
     if let Some(controls) = controls {
         let prev_entity = runner.0;
         if let Some(prev) = prev_entity {
@@ -365,13 +369,44 @@ fn run_transition(
             ControlsTransition::Space => assets.space.clone(),
         };
         let next_entity = inserted.entity;
-        commands.spawn(controls_bundle(
-            image,
-            duration.0 / 2.0,
-            duration.0 - duration.0 / 2.0,
-            0.5,
-            duration.0 / 2.0,
-        ));
+        if let Some(tips) = tips {
+            commands.spawn((
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..Default::default()
+                },
+                children![
+                    text_bundle(
+                        tips.0,
+                        duration.0 / 2.0,
+                        duration.0 - duration.0 / 2.0,
+                        0.5,
+                        duration.0 / 2.0,
+                    ),
+                    controls_bundle(
+                        false,
+                        image,
+                        duration.0 / 2.0,
+                        duration.0 - duration.0 / 2.0,
+                        0.5,
+                        duration.0 / 2.0,
+                    )
+                ],
+            ));
+        } else {
+            commands.spawn(controls_bundle(
+                true,
+                image,
+                duration.0 / 2.0,
+                duration.0 - duration.0 / 2.0,
+                0.5,
+                duration.0 / 2.0,
+            ));
+        }
         commands.spawn((
             DespawnFinished,
             AnimationTarget(*camera),
@@ -449,6 +484,7 @@ fn run_transition(
     }
 
     fn controls_bundle(
+        abs: bool,
         image: Handle<Image>,
         delay: f32,
         dur_in: f32,
@@ -462,7 +498,11 @@ fn run_transition(
                 ..Default::default()
             },
             Node {
-                position_type: PositionType::Absolute,
+                position_type: if abs {
+                    PositionType::Absolute
+                } else {
+                    PositionType::Relative
+                },
                 align_self: AlignSelf::Center,
                 justify_self: JustifySelf::Center,
                 height: percent(25.0),
@@ -497,6 +537,37 @@ fn run_transition(
             ],
         )
     }
+
+    fn text_bundle(text: &str, delay: f32, dur_in: f32, pause: f32, dur_out: f32) -> impl Bundle {
+        (
+            Text::new(text),
+            TextFont::from_font_size(80.0),
+            TextColorTween(Color::WHITE.with_alpha(0.0)),
+            Node {
+                // position_type: PositionType::Absolute,
+                align_self: AlignSelf::Center,
+                justify_self: JustifySelf::Center,
+                ..Default::default()
+            },
+            //
+            AnimationTarget::entity(),
+            DespawnFinished,
+            animations![
+                Duration(delay),
+                (
+                    Duration(dur_in),
+                    Keyframe(TextColorTween(Color::srgba(1.0, 1.0, 1.0, 1.0))),
+                    Easing::SineInOut,
+                ),
+                Duration(pause),
+                (
+                    Duration(dur_out),
+                    Keyframe(TextColorTween(Color::srgba(1.0, 1.0, 1.0, 0.0))),
+                    Easing::SineInOut,
+                ),
+            ],
+        )
+    }
 }
 
 #[derive(Component)]
@@ -511,17 +582,18 @@ struct ExhaustedMinigames;
 fn exhausted_minigames(
     _: On<ExhaustedMinigames>,
     mut commands: Commands,
-    state: Res<State<GameState>>,
+    _state: Res<State<GameState>>,
 ) {
-    match state.get() {
-        GameState::PhaseOne => {
-            commands.run_system_cached(exit_phase_one);
-        }
-        GameState::PhaseTwo => {
-            commands.set_state(GameState::Outro);
-        }
-        _ => {
-            commands.set_state(GameState::Outro);
-        }
-    }
+    commands.set_state(GameState::Outro);
+    // match state.get() {
+    //     // GameState::PhaseOne => {
+    //     //     commands.run_system_cached(exit_phase_one);
+    //     // }
+    //     // GameState::PhaseTwo => {
+    //     //     commands.set_state(GameState::Outro);
+    //     // }
+    //     _ => {
+    //         commands.set_state(GameState::Outro);
+    //     }
+    // }
 }

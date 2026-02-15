@@ -18,18 +18,14 @@ fn exit(
         AnimationTarget(*camera),
         DespawnFinished,
         animations![
-            (Duration(1.0), Keyframe(CameraTransitionProgress(0.5))),
+            (Duration(2.0), Keyframe(CameraTransitionProgress(1.0))),
             text_node("Thank you for playing!", 3.0),
             text_node(
                 "I could not have made this game without my lovely \
                 playtester, Corvus Prudens.",
                 6.0
             ),
-            text_node(
-                "I would love to hear how this game made you feel \
-                in the comments <3",
-                5.0
-            ),
+            text_node("I would love to hear how this game made you feel <3", 5.0),
             text_node("Good luck.", 2.0),
             system(|mut writer: MessageWriter<AppExit>| {
                 writer.write(AppExit::Success);

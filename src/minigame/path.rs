@@ -123,6 +123,7 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoor
                 Available,
                 MinigameTimer::duration(time),
                 ControlsTransition::Mouse,
+                ControlTips("FIND THE TARGET"),
                 TransitionDuration(tdur / 2.0),
                 DespawnOnExit(GameState::PhaseOne),
                 TargetRoot,

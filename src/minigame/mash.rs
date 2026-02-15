@@ -105,6 +105,7 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<MashAssets>) {
                 Available,
                 MinigameTimer::duration(time),
                 ControlsTransition::Space,
+                ControlTips("MASH"),
                 TransitionDuration(tdur / 2.0),
                 DespawnOnExit(GameState::PhaseOne),
                 Count(count),

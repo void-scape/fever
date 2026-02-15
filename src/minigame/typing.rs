@@ -3,6 +3,7 @@ use bevy::{
     color::palettes::css::RED,
     input::keyboard::{Key, KeyboardInput},
     prelude::*,
+    text::TextBounds,
 };
 use bevy_asset_loader::prelude::*;
 use bevy_seedling::prelude::*;
@@ -122,6 +123,8 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<TypingAssets>) {
                             index: 0,
                         },
                         Text2d::default(),
+                        TextLayout::new_with_justify(Justify::Center),
+                        TextBounds::new_horizontal(MESH_SIZE / 2.0),
                         children![
                             (
                                 TextSpan::default(),
