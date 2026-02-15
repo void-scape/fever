@@ -11,6 +11,61 @@ pub fn audio_plugin(app: &mut App) {
     );
 }
 
+pub struct SamplerBuilder {
+    lpf: Option<Lpf>,
+    volume: Option<f32>,
+    player: SamplePlayer,
+}
+
+impl SamplerBuilder {
+    pub fn new(player: SamplePlayer) -> Self {
+        Self {
+            lpf: None,
+            volume: None,
+            player,
+        }
+    }
+
+    pub fn lpf(mut self, lpf: Lpf) -> Self {
+        self.lpf = Some(lpf);
+        self
+    }
+
+    pub fn volume(mut self, volume: f32) -> Self {
+        self.volume = Some(volume);
+        self
+    }
+
+    pub fn build(self) -> impl Bundle {
+        (
+            self.player,
+            match (self.lpf, self.volume) {
+                (Some(lpf), None) => {
+                    sample_effects![LowPassNode { frequency: lpf.0 }, VolumeNode::default()]
+                }
+                (None, Some(vol)) => {
+                    sample_effects![LowPassNode::default(), VolumeNode::from_linear(vol)]
+                }
+                (Some(lpf), Some(vol)) => {
+                    sample_effects![
+                        LowPassNode { frequency: lpf.0 },
+                        VolumeNode::from_linear(vol),
+                    ]
+                }
+                (None, None) => sample_effects![LowPassNode::default(), VolumeNode::default()],
+            },
+            match self.volume {
+                Some(volume) => LinearVolume(volume),
+                None => LinearVolume(1.0),
+            },
+            match self.lpf {
+                Some(lpf) => lpf,
+                None => Lpf::MAX,
+            },
+        )
+    }
+}
+
 #[derive(Clone, Copy, Component, Lerp)]
 pub struct LinearVolume(pub f32);
 
@@ -44,11 +99,14 @@ pub struct Lpf(pub f32);
 
 impl Default for Lpf {
     fn default() -> Self {
-        Self(20_000.0)
+        Self::MAX
     }
 }
 
 impl Lpf {
+    pub const MIN: Self = Self(100.0);
+    pub const MAX: Self = Self(20_000.0);
+
     pub fn distance(d: f32, max: f32) -> Self {
         Self((1.0 - (d / max).clamp(0.0, 1.0)) * 20_000.0 + 100.0)
     }
@@ -87,7 +145,7 @@ fn playback_speed(
 pub struct LowPass {
     g: f32,
     gi: f32,
-    state: f32,
+    pub state: f32,
 }
 
 impl LowPass {

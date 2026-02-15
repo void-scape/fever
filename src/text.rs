@@ -1,6 +1,4 @@
-use crate::animation::*;
-use crate::minigame::MinigameAssets;
-use crate::state::GameState;
+use crate::prelude::*;
 use bevy::prelude::*;
 use bevy_pretty_text::prelude::*;
 use bevy_seedling::prelude::*;
@@ -10,7 +8,7 @@ pub fn text_plugin(app: &mut App) {
         .add_observer(advance)
         .add_observer(glyph)
         .add_systems(OnEnter(GameState::Intro), narrator_glyph)
-        .add_systems(OnEnter(GameState::Playing), narrator_glyph);
+        .add_systems(OnEnter(GameState::PhaseOne), narrator_glyph);
 }
 
 fn text_node(text: impl Bundle) -> impl Bundle {
@@ -22,7 +20,6 @@ fn text_node(text: impl Bundle) -> impl Bundle {
             align_items: AlignItems::Center,
             ..default()
         },
-        BackgroundColor(Color::BLACK),
         GlobalZIndex(500),
         children![(
             Node {
@@ -46,7 +43,9 @@ pub fn await_finish(text: impl Bundle) -> impl Bundle {
               advance: Query<Entity, With<Advance>>,
               mut entity: Local<Option<Entity>>,
               input: Res<ButtonInput<KeyCode>>,
-              typewriters: Query<Entity, With<Typewriter>>| {
+              typewriters: Query<Entity, With<Typewriter>>,
+              mut fractal: Single<&mut Opacity, With<Fractal>>| {
+            fractal.0 = 0.0;
             if let Some(text) = text.take() {
                 *entity = Some(commands.spawn(text_node(text)).id());
             }
@@ -78,7 +77,9 @@ pub fn await_input(text: impl Bundle) -> impl Bundle {
               input: Res<ButtonInput<KeyCode>>,
               mut awaiting_input: Local<bool>,
               mut entity: Local<Option<Entity>>,
-              typewriters: Query<Entity, With<Typewriter>>| {
+              typewriters: Query<Entity, With<Typewriter>>,
+              mut fractal: Single<&mut Opacity, With<Fractal>>| {
+            fractal.0 = 0.0;
             if let Some(text) = text.take() {
                 *entity = Some(commands.spawn(text_node(text)).id());
             }

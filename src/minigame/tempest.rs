@@ -1,5 +1,5 @@
 use crate::{
-    minigame::prelude::{ControlsTransition, Transition},
+    minigame::prelude::{ControlsTransition, Transition, fade_volume_transition},
     prelude::*,
 };
 use bevy::{color::palettes::css::YELLOW, prelude::*};
@@ -11,13 +11,13 @@ use std::f32::consts::{PI, TAU};
 
 pub fn tempest_plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<TempestAssets>())
-        .add_systems(OnEnter(GameState::Playing), init_targets)
+        .add_systems(OnEnter(GameState::SpawnPhaseOne), init_targets)
         .add_systems(OnEnter(Minigame::Tempest), lock_camera)
         .add_systems(OnEnter(Minigame::Tempest), force_camera_origin)
         .add_systems(OnExit(Minigame::Tempest), unforce_camera_origin)
         .add_systems(
             Update,
-            (player, spawner, (enemy, zoom), lpf)
+            (player, spawner, (enemy, zoom))
                 .chain()
                 .run_if(in_state(Minigame::Tempest)),
         )
@@ -113,7 +113,7 @@ fn init_targets(
 
     commands.spawn((
         MinigameRoot,
-        DespawnOnExit(GameState::Playing),
+        DespawnOnExit(GameState::SpawnPhaseOne),
         Minigame::Tempest,
         children![(VariationSet, scenes)],
     ));
@@ -144,13 +144,9 @@ fn init_targets(
                     Visibility::default(),
                     colliders(),
                     //
-                    SamplePlayer::new(music.clone())
-                        .with_volume(Volume::Linear(0.8))
-                        .looping(),
-                    sample_effects![LowPassNode {
-                        frequency: Lpf::distance(1.0, 1.0).0,
-                    }],
-                    Lpf::distance(1.0, 1.0),
+                    SamplePlayer::new(music.clone()).looping(),
+                    sample_effects![VolumeNode::from_linear(0.0)],
+                    fade_volume_transition(0.6),
                 ));
             },
         ));
@@ -234,16 +230,6 @@ fn enemy(
 
 fn zoom(mut zoom: Single<&mut Zoom, With<Fractal>>, time: Res<Time>) {
     zoom.0 *= (-time.delta_secs()).exp();
-}
-
-fn lpf(mut lpf: Single<&mut Lpf, With<SceneRoot>>, enemies: Query<&Transform, With<Enemy>>) {
-    let closest = enemies
-        .iter()
-        .map(|t| (t.translation.xy().length_squared() - RADIUS * RADIUS).abs())
-        .reduce(f32::min);
-    if let Some(closest) = closest {
-        **lpf = Lpf::distance(closest.sqrt() * 1.3, RADIUS);
-    }
 }
 
 fn collision(

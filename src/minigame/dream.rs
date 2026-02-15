@@ -1,4 +1,4 @@
-use crate::{minigame::prelude::*, prelude::*};
+use crate::prelude::*;
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 use bevy_pretty_text::prelude::*;
@@ -7,16 +7,22 @@ use bevy_seedling::prelude::*;
 pub fn dream_plugin(app: &mut App) {
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<DreamAssets>())
         .add_systems(Startup, spawn_styles)
-        .add_systems(OnEnter(GameState::Playing), spawn_variants)
-        .add_systems(OnEnter(Minigame::Dream), lock_camera)
-        .add_systems(Update, scramble.run_if(in_state(Minigame::Dream)));
+        .add_systems(
+            OnEnter(GameState::PhaseOne),
+            spawn_phase_one.in_set(MinigameSpawnSystems),
+        )
+        .add_systems(
+            OnEnter(GameState::PhaseTwo),
+            spawn_phase_one.in_set(MinigameSpawnSystems),
+        )
+        .add_systems(Update, scramble);
 }
+
+#[derive(Component)]
+pub struct DreamSequenceIndex(pub usize);
 
 #[derive(AssetCollection, Resource)]
 struct DreamAssets {
-    #[asset(path = "sfx/cut.ogg")]
-    cut: Handle<AudioSample>,
-    //
     #[asset(path = "music/rain.ogg")]
     rain: Handle<AudioSample>,
     #[asset(path = "music/deep.ogg")]
@@ -41,130 +47,138 @@ fn spawn_styles(mut commands: Commands, mut materials: ResMut<Assets<Glitch>>) {
     ));
 }
 
-fn spawn_variants(mut commands: Commands, assets: Res<DreamAssets>) {
-    let variations = children![(
-        VariationSet,
-        NotRandom,
-        children![
-            variation(
-                &mut commands,
-                Default::default(),
-                assets.cut.clone(),
-                assets.deep.clone(),
-                (
-                    AnimationTarget::entity(),
-                    DespawnFinished,
-                    animations![
-                        await_input((
-                            FadeIn::default(),
-                            pretty!(
-                                "|1|Darkness shrouds my body.|1|<1.5> [Where are my \
-                                hands?](wave, gray)"
-                            )
-                        )),
-                        await_input((
-                            FadeIn::default(),
-                            pretty!(
-                                "|2|Do [you](red) feel like I feel?|1| Do [you](red) feel me \
+fn spawn_phase_one(mut commands: Commands, assets: Res<DreamAssets>) {
+    let root = commands.spawn(MinigameSequence).id();
+
+    seq(
+        &mut commands,
+        root,
+        assets.deep.clone(),
+        0,
+        (
+            AnimationTarget::entity(),
+            DespawnFinished,
+            animations![
+                await_input((
+                    FadeIn::default(),
+                    pretty!("|1|Darkness shrouds my body.|1|<1.5> [I can not see...](wave, gray)")
+                )),
+                await_input((
+                    FadeIn::default(),
+                    pretty!(
+                        "|2|Do [you](red) feel like I feel?|1| Do [you](red) feel me \
                                 [scraping](glitch) at [your](red) walls?"
-                            )
-                        )),
-                        // "STATIC ITCH",
-                        queue_minigame(Minigame::Typing),
-                        system(run_choose_systems),
-                    ],
+                    )
+                )),
+            ],
+        ),
+    );
+    seq(
+        &mut commands,
+        root,
+        assets.rain.clone(),
+        1,
+        (
+            AnimationTarget::entity(),
+            DespawnFinished,
+            animations![await_input((
+                FadeIn::default(),
+                pretty!(
+                    "|1|Yes,|0.2| [you](red) are more now than \
+                    [you](red) were.|1| \
+                    [I am falling into [you](red)?](wave, gray)"
                 )
-            ),
-            variation(
-                &mut commands,
-                Default::default(),
-                assets.cut.clone(),
-                assets.rain.clone(),
-                (
-                    AnimationTarget::entity(),
-                    DespawnFinished,
-                    animations![
-                        await_input((
-                            FadeIn::default(),
-                            pretty!(
-                                "|1|Yes,|0.2| [you](red) are bigger now than \
-                                    [you](red) were.|1| \
-                                    [I am falling into [you](red)?](wave, gray)"
-                            )
-                        )),
-                        // "NO ESCAPE",
-                        queue_minigame(Minigame::Typing),
-                        system(run_choose_systems),
-                    ],
-                )
-            ),
-            variation(
-                &mut commands,
-                Default::default(),
-                assets.cut.clone(),
-                assets.swamp.clone(),
-                (
-                    PlaybackSettings::default().with_speed(0.5),
-                    AnimationTarget::entity(),
-                    DespawnFinished,
-                    animations![
-                        await_finish(pretty!("I am sick of [you](red)|0.5|")),
-                        await_finish(pretty!("[wriggling](glitch) in my body|0.5|")),
-                        await_finish(pretty!("<0.75>[GET OUT](shake, red)|0.1|")),
-                        // "CONSUMING MIND",
-                        queue_minigame(Minigame::Typing),
-                        system(run_choose_systems),
-                    ],
-                )
-            ),
-            variation(
-                &mut commands,
-                Default::default(),
-                assets.cut.clone(),
-                assets.birds.clone(),
-                (
-                    PlaybackSettings::default().with_speed(0.6),
-                    AnimationTarget::entity(),
-                    DespawnFinished,
-                    animations![
-                        await_finish((Scramb, pretty!("<0.6>what are you doing here"))),
-                        await_finish((Scramb, pretty!("<0.6>this is my code silly"))),
-                        // "INEVITABILITY",
-                        queue_minigame(Minigame::Typing),
-                        system(run_choose_systems),
-                    ],
-                )
-            ),
-        ],
-    )];
+            )),],
+        ),
+    );
+    seq(
+        &mut commands,
+        root,
+        assets.swamp.clone(),
+        2,
+        (
+            PlaybackSettings::default().with_speed(0.5),
+            AnimationTarget::entity(),
+            DespawnFinished,
+            animations![
+                await_finish(pretty!("I am sick of [you](red)|0.5|")),
+                await_finish(pretty!("[wriggling](glitch) in my body|0.5|")),
+                await_finish(pretty!(
+                    "<0.75>I have no [mouth](shake, red) and \
+                        yet [you](red) hear|0.1|"
+                )),
+            ],
+        ),
+    );
+    seq(
+        &mut commands,
+        root,
+        assets.birds.clone(),
+        3,
+        (
+            PlaybackSettings::default().with_speed(0.6),
+            AnimationTarget::entity(),
+            DespawnFinished,
+            animations![await_finish((
+                Scramb,
+                pretty!("<0.8>dont look at my code plz")
+            ))],
+        ),
+    );
 
-    commands.spawn((
-        MinigameRoot,
-        DespawnOnExit(GameState::Playing),
-        AvailableAfter(6),
-        Minigame::Dream,
-        variations,
-    ));
-
-    fn variation(
+    fn seq(
         commands: &mut Commands,
-        image: Handle<Image>,
-        sfx: Handle<AudioSample>,
+        root: Entity,
         music: Handle<AudioSample>,
+        index: usize,
         bundle: impl Bundle,
-    ) -> impl Bundle {
+    ) {
         let mut bundle = Some(bundle);
-        let on_start = OnVariationEnable(commands.register_system(
-            move |_: In<Entity>,
-                  mut commands: Commands,
-                  mut opacity: Single<&mut Opacity, With<Fractal>>| {
-                opacity.0 = 0.0;
-                if let Some(bundle) = bundle.take() {
-                    commands.spawn((bundle, SamplePlayer::new(music.clone()).looping()));
-                }
-            },
+        let tdur = 0.15;
+        let mut entity = commands.spawn((
+            ChildOf(root),
+            Minigame,
+            CutTransition,
+            TransitionDuration(tdur / 2.0),
+            DespawnOnExit(GameState::PhaseOne),
         ));
-        (Variation, on_start, CutTransition { image, sfx })
+
+        if index == 0 {
+            entity.insert(AvailableAfter(6));
+        }
+
+        entity
+            .observe(
+                move |enter: On<Insert, EnterMinigame>,
+                      mut commands: Commands,
+                      fractal: Single<Entity, With<Fractal>>,
+                      typing: Query<(Entity, &DreamSequenceIndex)>,
+                      mut queue: ResMut<MinigameQueue>| {
+                    commands
+                        .entity(*fractal)
+                        .insert(ResetFractal)
+                        .insert(Opacity(0.0));
+
+                    if let Some(bundle) = bundle.take() {
+                        commands.entity(enter.entity).insert((
+                            SamplerBuilder::new(SamplePlayer::new(music.clone()).looping())
+                                .volume(0.8)
+                                .build(),
+                            bundle,
+                        ));
+                    }
+
+                    if let Some(next) = typing.iter().find_map(|(e, i)| (i.0 == index).then_some(e))
+                    {
+                        queue.push_back(next);
+                    }
+
+                    commands.run_system_cached(lock_camera);
+                },
+            )
+            .observe(|finished: On<Insert, Finished>, mut commands: Commands| {
+                commands.entity(finished.entity).insert(WonMinigame);
+            });
     }
 }
 

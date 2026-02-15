@@ -39,6 +39,8 @@ pub enum AnimationSystems {
     Step,
 }
 
+pub type AnimationComponents = (Finished, Playhead, Duration, Active, Loop);
+
 pub fn set_state<S: FreelyMutableState + Clone>(state: S) -> System {
     system(move |mut commands: Commands| {
         commands.set_state(state.clone());
@@ -140,7 +142,7 @@ pub struct Parallel;
 pub struct Duration(pub f32);
 
 #[derive(Default, Component)]
-struct Playhead(f32);
+pub struct Playhead(pub f32);
 
 #[derive(Component)]
 pub struct Finished;
@@ -330,15 +332,16 @@ fn one_shot_system(
 ) {
     for entity in animations.iter() {
         commands.queue(move |world: &mut World| {
-            let mut system = world.get_mut::<System>(entity).unwrap();
-            let mut s = system.0.take().unwrap();
-            let result = s(world);
-            let mut system = world.get_mut::<System>(entity).unwrap();
-            _ = system.0.insert(s);
-            if result {
-                world.entity_mut(entity).remove::<Blocked>();
-            } else {
-                world.entity_mut(entity).insert(Blocked);
+            if let Some(mut system) = world.get_mut::<System>(entity) {
+                let mut s = system.0.take().unwrap();
+                let result = s(world);
+                let mut system = world.get_mut::<System>(entity).unwrap();
+                _ = system.0.insert(s);
+                if result {
+                    world.entity_mut(entity).remove::<Blocked>();
+                } else {
+                    world.entity_mut(entity).insert(Blocked);
+                }
             }
         });
     }

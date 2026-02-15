@@ -9,13 +9,11 @@ pub mod prelude {
     pub use super::audio::*;
     pub use super::camera::*;
     pub use super::fractal::*;
-    pub use super::intro::*;
     pub use super::minigame::*;
-    pub use super::outro::*;
     pub use super::state::*;
     pub use super::text::*;
     pub use super::tween::*;
-    pub use super::{animations, parallel};
+    pub use super::{ImageOf, Images, animations, parallel};
     pub use bevy_rand::{global::GlobalRng, prelude::WyRand};
 }
 
@@ -27,6 +25,7 @@ pub mod fractal;
 pub mod intro;
 pub mod minigame;
 pub mod outro;
+pub mod restart;
 pub mod state;
 pub mod text;
 pub mod tween;
@@ -70,6 +69,7 @@ fn main() {
         camera::camera_plugin,
         outro::outro_plugin,
         tween::tween_plugin,
+        restart::restart_plugin,
     ))
     .add_systems(Startup, gizmos_line_width);
 
@@ -96,3 +96,11 @@ fn gizmos_line_width(mut config_store: ResMut<GizmoConfigStore>) {
     let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
     config.line.width = 5.0;
 }
+
+#[derive(Component)]
+#[relationship_target(relationship = ImageOf, linked_spawn)]
+pub struct Images(Vec<Entity>);
+
+#[derive(Component)]
+#[relationship(relationship_target = Images)]
+pub struct ImageOf(pub Entity);

@@ -10,7 +10,7 @@ use fever_macros::Lerp;
 pub fn intro_plugin(app: &mut App) {
     #[cfg(feature = "dev")]
     app.add_systems(OnEnter(GameState::Intro), |mut commands: Commands| {
-        commands.set_state(GameState::Playing);
+        commands.set_state(GameState::PhaseOne);
     });
 
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<IntroAssets>())
@@ -339,10 +339,10 @@ fn flavor_text(mut commands: Commands) {
                 pretty!(
                     "|1|<0.9>I move my hand over [you](red)|0.25|<1.15> but it<1> \
                     does not block [your](red) \
-                    <0.8>[bleeding glow](glitch).|1| [You](red) must be|0.25|<0.75> imaginary."
+                    <0.8>[bleeding glow](glitch)<0.5>...|1|<1> but it is not light I see."
                 )
             )),
-            set_state(GameState::Playing),
+            set_state(GameState::PhaseOne),
         ],
     ));
 }

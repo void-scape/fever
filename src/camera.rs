@@ -1,10 +1,9 @@
-use crate::{
-    animation::AnimationSystems,
-    fractal::{CPlane, Fractal, FractalMesh, JuliaCoordinates},
-    state::GameState,
-};
+use crate::prelude::*;
 use bevy::{
-    color::palettes::css::RED,
+    color::palettes::{
+        css::BLACK,
+        tailwind::{BLUE_950, RED_950, ROSE_800, VIOLET_800},
+    },
     core_pipeline::{
         core_2d::graph::Node2d,
         fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin},
@@ -20,15 +19,14 @@ use bevy::{
 use fever_macros::Lerp;
 
 pub fn camera_plugin(app: &mut App) {
-    app.add_systems(OnExit(GameState::Loading), spawn)
+    app.init_resource::<TransitionPalette>()
+        .add_systems(OnExit(GameState::Loading), spawn)
+        .add_systems(Update, move_camera.after(AnimationSystems::Interpolate))
+        .add_plugins(FullscreenMaterialPlugin::<CameraTransition>::default())
         .add_systems(
             Update,
-            move_camera
-                .after(AnimationSystems::Interpolate)
-                .run_if(in_state(GameState::Playing)),
-        )
-        .add_plugins(FullscreenMaterialPlugin::<CameraTransition>::default())
-        .add_systems(Update, transition_progress);
+            (transition_progress, transition_time, transition_palette),
+        );
 }
 
 fn spawn(mut commands: Commands) {
@@ -96,29 +94,58 @@ fn move_camera(
 pub struct CameraTransitionProgress(pub f32);
 
 fn transition_progress(
-    time: Res<Time>,
     args: Single<
         (&mut CameraTransition, &CameraTransitionProgress),
         Changed<CameraTransitionProgress>,
     >,
 ) {
     let (mut transition, progress) = args.into_inner();
-    transition.time += time.delta_secs();
     transition.progress = progress.0;
     transition.background_threshold = (1.0 - progress.0 * 2.0).abs() - 0.5;
-    transition.color_threshold = (-4.0 + progress.0 * 8.0).abs().min(1.0) * 0.48;
+    transition.color_low_threshold = (-4.0 + progress.0 * 8.0).abs().min(1.0) * 0.24;
+    transition.color_mid_threshold = (-4.0 + progress.0 * 8.0).abs().min(1.0) * 0.48;
+}
+
+fn transition_time(time: Res<Time>, mut args: Single<&mut CameraTransition>) {
+    args.time = time.elapsed_secs_wrapped();
+}
+
+#[derive(Default, Resource)]
+pub enum TransitionPalette {
+    #[default]
+    Blue,
+    Red,
+}
+
+fn transition_palette(mut args: Single<&mut CameraTransition>, palette: Res<TransitionPalette>) {
+    if palette.is_changed() {
+        match *palette {
+            TransitionPalette::Blue => {
+                args.color_low = BLACK.into();
+                args.color_mid = BLUE_950.into();
+                args.color_high = VIOLET_800.into();
+            }
+            TransitionPalette::Red => {
+                args.color_low = BLACK.into();
+                args.color_mid = RED_950.into();
+                args.color_high = ROSE_800.into();
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Component, ExtractComponent, ShaderType)]
 #[require(CameraTransitionProgress)]
 pub struct CameraTransition {
-    color: LinearRgba,
-    pixelation: Vec2,
+    color_low: LinearRgba,
+    color_mid: LinearRgba,
+    color_high: LinearRgba,
     progress: f32,
     speed: f32,
     zoom: f32,
     background_threshold: f32,
-    color_threshold: f32,
+    color_low_threshold: f32,
+    color_mid_threshold: f32,
     seed: f32,
     time: f32,
 }
@@ -126,14 +153,16 @@ pub struct CameraTransition {
 impl Default for CameraTransition {
     fn default() -> Self {
         Self {
-            pixelation: Vec2::splat(1.0),
-            color: RED.into(),
+            color_low: BLACK.into(),
+            color_mid: BLUE_950.into(),
+            color_high: VIOLET_800.into(),
             progress: 0.0,
-            speed: 0.1,
-            zoom: 2.0,
+            speed: 0.4,
+            zoom: 4.0,
             background_threshold: 0.0,
-            color_threshold: 0.0,
-            seed: 420.0,
+            color_low_threshold: 0.0,
+            color_mid_threshold: 0.0,
+            seed: 69.0,
             time: 0.0,
         }
     }

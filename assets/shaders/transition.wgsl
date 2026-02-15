@@ -28,13 +28,15 @@
 @group(0) @binding(1) var screen_sampler: sampler;
 
 struct TransitionUniform {
-    color: vec4<f32>,
-    pixelation: vec2<f32>,
+	color_low: vec4<f32>,
+	color_mid: vec4<f32>,
+	color_high: vec4<f32>,
     progress: f32,
     speed: f32,
     zoom: f32,
     background_threshold: f32,
-    color_threshold: f32,
+    color_low_threshold: f32,
+    color_mid_threshold: f32,
     seed: f32,
 	time: f32,
 };
@@ -82,29 +84,43 @@ fn pattern(p: vec2<f32>) -> f32 {
 
 fn colormap(in: f32, uv: vec2<f32>) -> vec4<f32> {
     var x = in;
-    let val = max(0.0, min(-abs(args.progress * 4.0 - uv.x - uv.y - 1.0) + 1.0, 1.0) * 2.0);
+    let sz = textureDimensions(screen_texture);
+    let aspect = f32(sz.x) / f32(sz.y);
+    let sweep = (uv.x * aspect + uv.y) / (aspect + 1.0);
+    let val = max(0.0, min(-abs(args.progress * 4.0 - sweep * 2.0 - 1.0) + 1.0, 1.0) * 2.0);
     x *= val;
-    if (x < args.background_threshold) { 
+    if x < args.background_threshold { 
         return vec4(0.0, 0.0, 0.0, 0.0);
-    } else if (x < args.color_threshold) { 
-        let mix_factor = round((x - args.background_threshold) / (args.color_threshold - args.background_threshold));
+	} else if x < args.color_low_threshold { 
         return mix(
-            vec4(0.0, 0.0, 0.0, 0.0),
-            args.color,
-            mix_factor
-        );
+			vec4(0.0, 0.0, 0.0, 0.0),
+			args.color_low,
+			(x - args.background_threshold) / (args.color_low_threshold - args.background_threshold)
+		);
+    } else if x < args.color_mid_threshold { 
+        return mix(
+			args.color_low,
+			args.color_mid,
+			(x - args.color_low_threshold) / (args.color_mid_threshold - args.color_low_threshold)
+		);
     } else {
-        return args.color;
-    }
+		return mix(
+			args.color_mid,
+			args.color_high,
+			(x - args.color_mid_threshold) / (1.0 - args.color_mid_threshold)
+		);
+	}
 }
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-	let sz = textureDimensions(screen_texture);
-    let modifier = 1.0 / ((1.0 / vec2(f32(sz.x), f32(sz.y))) * args.pixelation);
+    let sz = textureDimensions(screen_texture);
+    let aspect = f32(sz.x) / f32(sz.y);
+    let modifier = 1.0 / (1.0 / vec2(f32(sz.x), f32(sz.y)));
     let grid_uv = floor(in.uv * modifier) / modifier;
-    let shade = pattern(grid_uv * args.zoom);
-	let noise = colormap(shade, grid_uv);
-	let screen = textureSample(screen_texture, screen_sampler, in.uv);
-    return mix(screen, noise, noise.a);
+    let aspect_uv = vec2(grid_uv.x * aspect, grid_uv.y);
+    let shade = pattern(aspect_uv * args.zoom);
+    let noise_color = colormap(shade, grid_uv);
+    let screen = textureSample(screen_texture, screen_sampler, in.uv);
+    return mix(screen, noise_color, noise_color.a);
 }
