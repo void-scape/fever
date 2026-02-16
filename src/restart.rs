@@ -12,6 +12,7 @@ fn restart(
     mut palette: ResMut<TransitionPalette>,
     camera: Single<Entity, With<Camera>>,
 ) {
+    commands.entity(*camera).insert(ResetCamera);
     let tdur = 0.15;
     *palette = TransitionPalette::Red;
     commands.spawn((
@@ -21,12 +22,20 @@ fn restart(
             (Duration(2.0), Keyframe(CameraTransitionProgress(0.5))),
             Duration(1.0),
             system(narrator_glyph),
-            await_finish(pretty!("I will awake from this dream lest I-|0.1|")),
-            system(move |mut commands: Commands| {
-                commands
-                    .spawn((CutTransition, TransitionDuration(tdur)))
-                    .insert(RunTransition(None));
-            }),
+            unskippable((
+                FadeIn::default(),
+                pretty!("I will awake from this dream lest I-|0.1|")
+            )),
+            system(
+                move |mut commands: Commands, minigames: Query<Entity, Or<(With<Minigame>, With<typing::Music>)>>| {
+                    for entity in minigames.iter() {
+                        commands.entity(entity).despawn();
+                    }
+                    commands
+                        .spawn((CutTransition, TransitionDuration(tdur)))
+                        .insert(RunTransition(None));
+                }
+            ),
             Duration(tdur),
             system(restart_state),
         ],

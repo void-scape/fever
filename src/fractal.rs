@@ -9,6 +9,8 @@ use bevy::{
     sprite_render::{Material2d, Material2dPlugin},
     window::PrimaryWindow,
 };
+#[cfg(feature = "dev")]
+use bevy_rand::{global::GlobalRng, prelude::WyRand};
 use fever_macros::Lerp;
 
 pub fn fractal_plugin(app: &mut App) {
@@ -32,6 +34,7 @@ pub fn fractal_plugin(app: &mut App) {
                     mandelbrot,
                     escape_radius,
                     exponent,
+                    rotation,
                 ),
                 move_c_plane,
                 fractal,
@@ -75,7 +78,8 @@ macro_rules! new_type_param {
     BurningShip,
     Mandelbrot,
     EscapeRadius,
-    Exponent
+    Exponent,
+    Rotation
 )]
 pub struct Fractal(FractalUniform);
 
@@ -103,6 +107,7 @@ fn reset_fractal(fractal: On<Insert, ResetFractal>, mut commands: Commands) {
         Mandelbrot::default(),
         EscapeRadius::default(),
         Exponent::default(),
+        Rotation::default(),
     ));
 }
 
@@ -130,6 +135,7 @@ new_type_param!(Zoom, f32, zoom, 1.5);
 new_type_param!(Opacity, f32, opacity, 1.0);
 new_type_param!(EscapeRadius, f32, escape_radius, 2.0);
 new_type_param!(Exponent, f32, exponent, 2.0);
+new_type_param!(Rotation, f32, rotation);
 
 #[derive(Component)]
 pub struct FractalMesh;
@@ -150,13 +156,27 @@ fn spawn(
     ));
 }
 
+#[derive(Component)]
+pub struct DontSyncMesh;
+
+pub fn unsync_fractal_mesh(mut commands: Commands, fractal: Single<Entity, With<FractalMesh>>) {
+    commands.entity(*fractal).insert(DontSyncMesh);
+}
+
+pub fn sync_fractal_mesh(mut commands: Commands, fractal: Single<Entity, With<FractalMesh>>) {
+    commands.entity(*fractal).remove::<DontSyncMesh>();
+}
+
 fn sync_fractal_material_with_camera(
-    mut fractal: Single<&mut Transform, (With<FractalMesh>, Without<Camera2d>)>,
+    fractal: Single<(&mut Transform, Has<DontSyncMesh>), (With<FractalMesh>, Without<Camera2d>)>,
     camera: Single<&Transform, With<Camera2d>>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) {
-    fractal.translation.x = camera.translation.x;
-    fractal.translation.y = camera.translation.y;
+    let (mut fractal, dont_sync) = fractal.into_inner();
+    if !dont_sync {
+        fractal.translation.x = camera.translation.x;
+        fractal.translation.y = camera.translation.y;
+    }
     fractal.scale = Vec3::splat(window.size().min_element());
 }
 
@@ -190,7 +210,8 @@ struct Params {
     burning_ship: u32,
     mandelbrot: u32,
     opacity: f32,
-    _pad: Vec3,
+    rotation: f32,
+    _pad: Vec2,
 }
 
 #[cfg(feature = "dev")]
@@ -198,15 +219,22 @@ fn log_params(
     mut commands: Commands,
     input: Res<ButtonInput<KeyCode>>,
     mut assets: ResMut<Assets<FractalUniform>>,
+    mut rng: Single<&mut WyRand, With<GlobalRng>>,
 ) {
     if input.just_pressed(KeyCode::KeyP) {
         for (_, fractal) in assets.iter_mut() {
             println!("{:#?}", fractal.params);
         }
         use bevy::render::view::window::screenshot::*;
+        use rand::Rng;
         commands
             .spawn(Screenshot::primary_window())
-            .observe(save_to_disk("screenshot.png"));
+            .observe(save_to_disk(format!(
+                "screenshots/{}.png",
+                (0..10)
+                    .map(|_| rng.random_range(0u32..10u32).to_string())
+                    .collect::<String>()
+            )));
     }
 }
 

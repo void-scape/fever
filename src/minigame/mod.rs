@@ -10,7 +10,7 @@ mod mash;
 mod matching;
 mod path;
 mod sweep;
-mod typing;
+pub mod typing;
 
 pub fn minigame_plugin(app: &mut App) {
     app.add_loading_state(
@@ -68,6 +68,14 @@ pub struct MinigameAssets {
     pub noise3: Handle<Image>,
     #[asset(path = "images/fractals/noise4-last-breath.png")]
     pub noise4: Handle<Image>,
+    #[asset(path = "images/fractals/last-breath.png")]
+    pub last_breath: Handle<Image>,
+    #[asset(path = "images/fractals/pl-julia.png")]
+    pub pl_julia: Handle<Image>,
+    #[asset(path = "images/fractals/odd-julia.png")]
+    pub odd_julia: Handle<Image>,
+    #[asset(path = "images/fractals/star-ship.png")]
+    pub star_ship: Handle<Image>,
     //
     #[asset(path = "sfx/cut.ogg")]
     pub cut: Handle<AudioSample>,
@@ -84,9 +92,15 @@ pub struct MinigameAssets {
     pub narrator_glyph: Handle<AudioSample>,
     #[asset(path = "sfx/presence-glyph.ogg")]
     pub presence_glyph: Handle<AudioSample>,
+    #[asset(path = "sfx/yuy.ogg")]
+    pub yuy: Handle<AudioSample>,
+    //
+    #[asset(path = "third-party/font.otf")]
+    pub font: Handle<Font>,
 }
 
 #[derive(Component)]
+#[require(Transform, Visibility)]
 pub struct Minigame;
 
 #[derive(Component)]
@@ -144,7 +158,9 @@ fn won_minigame(
     mut queue: ResMut<MinigameQueue>,
     assets: Res<MinigameAssets>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
+    mut completed: ResMut<CompletedMinigames>,
 ) {
+    completed.0 += 1;
     if valid_minigame.get(inserted.entity).is_err() {
         panic!("inserted `WonMinigame` into a non `Minigame` entity");
     }
@@ -156,8 +172,10 @@ fn won_minigame(
         commands.spawn((
             SamplePlayer::new(assets.succeed.clone()).with_volume(Volume::Linear(0.4)),
             PlaybackSettings::default().with_speed(0.8),
+            WinSfx,
         ));
     }
+    commands.run_system_cached(available_after);
     if let Some(next) = queue.pop_front() {
         commands
             .entity(next)
@@ -175,7 +193,6 @@ fn won_minigame(
     } else {
         commands.trigger(ExhaustedMinigames);
     }
-    commands.run_system_cached(available_after);
 }
 
 #[derive(Component)]
@@ -195,7 +212,9 @@ fn lost_minigame(
     mut count: Local<usize>,
     state: Res<State<GameState>>,
     mut rng: Single<&mut WyRand, With<GlobalRng>>,
+    mut completed: ResMut<CompletedMinigames>,
 ) {
+    completed.0 += 1;
     if valid_minigame.get(inserted.entity).is_err() {
         panic!("inserted `LostMinigame` into a non `Minigame` entity");
     }
@@ -207,6 +226,7 @@ fn lost_minigame(
         commands.spawn((
             SamplePlayer::new(assets.timeout.clone()).with_volume(Volume::Linear(0.4)),
             PlaybackSettings::default().with_speed(0.8),
+            LooseSfx,
         ));
     }
     *count += 1;
@@ -220,6 +240,7 @@ fn lost_minigame(
         }));
         return;
     }
+    commands.run_system_cached(available_after);
     if let Some(next) = queue.pop_front() {
         commands
             .entity(next)
@@ -237,7 +258,6 @@ fn lost_minigame(
     } else {
         commands.trigger(ExhaustedMinigames);
     }
-    commands.run_system_cached(available_after);
 }
 
 #[derive(Component)]
@@ -321,6 +341,9 @@ pub struct ControlTips(pub &'static str);
 pub struct CutTransition;
 
 #[derive(Component)]
+pub struct NoCutSfx;
+
+#[derive(Component)]
 pub struct TransitionDuration(pub f32);
 
 impl Default for TransitionDuration {
@@ -339,6 +362,7 @@ fn run_transition(
     transitions: Query<(
         Option<&ControlsTransition>,
         Option<&CutTransition>,
+        Has<NoCutSfx>,
         Option<&ControlTips>,
         &TransitionDuration,
     )>,
@@ -348,7 +372,7 @@ fn run_transition(
     assets: Res<MinigameAssets>,
 ) {
     let runner = run.get(inserted.entity).unwrap();
-    let (controls, cut, tips, duration) = transitions.get(inserted.entity).unwrap();
+    let (controls, cut, no_cut_sfx, tips, duration) = transitions.get(inserted.entity).unwrap();
     if let Some(controls) = controls {
         let prev_entity = runner.0;
         if let Some(prev) = prev_entity {
@@ -437,13 +461,15 @@ fn run_transition(
             animations![
                 system(
                     move |mut commands: Commands,
-                          sounds: Query<Entity, With<SamplePlayer>>,
+                          sounds: Query<
+                        Entity,
+                        (With<SamplePlayer>, Or<(With<WinSfx>, With<LooseSfx>)>),
+                    >,
                           assets: Res<MinigameAssets>,
                           mut rng: Single<&mut WyRand, With<GlobalRng>>,
                           mut fractal: Single<&mut Opacity, With<Fractal>>| {
                         fractal.0 = 0.0;
                         for entity in sounds.iter() {
-                            // TODO: find a better way to get rid of the success/failure sound
                             commands.entity(entity).despawn();
                         }
 
@@ -459,7 +485,7 @@ fn run_transition(
                             _ => unreachable!(),
                         };
 
-                        commands.spawn((
+                        let mut entity = commands.spawn((
                             ImageOf(image),
                             Node {
                                 width: percent(100),
@@ -467,9 +493,15 @@ fn run_transition(
                                 ..Default::default()
                             },
                             ImageNode::new(texture),
-                            SamplePlayer::new(assets.cut.clone()).with_volume(Volume::Linear(0.8)),
-                            PlaybackSettings::default().preserve(),
                         ));
+
+                        if !no_cut_sfx {
+                            entity.insert((
+                                SamplePlayer::new(assets.cut.clone())
+                                    .with_volume(Volume::Linear(0.8)),
+                                PlaybackSettings::default().preserve(),
+                            ));
+                        }
                     }
                 ),
                 Duration(duration.0),
@@ -582,18 +614,14 @@ struct ExhaustedMinigames;
 fn exhausted_minigames(
     _: On<ExhaustedMinigames>,
     mut commands: Commands,
-    _state: Res<State<GameState>>,
+    state: Res<State<GameState>>,
 ) {
-    commands.set_state(GameState::Outro);
-    // match state.get() {
-    //     // GameState::PhaseOne => {
-    //     //     commands.run_system_cached(exit_phase_one);
-    //     // }
-    //     // GameState::PhaseTwo => {
-    //     //     commands.set_state(GameState::Outro);
-    //     // }
-    //     _ => {
-    //         commands.set_state(GameState::Outro);
-    //     }
-    // }
+    match state.get() {
+        GameState::PhaseOne => {
+            commands.run_system_cached(exit_phase_one);
+        }
+        _ => {
+            commands.set_state(GameState::Outro);
+        }
+    }
 }

@@ -8,10 +8,10 @@ use bevy_seedling::prelude::*;
 use fever_macros::Lerp;
 
 pub fn intro_plugin(app: &mut App) {
-    #[cfg(feature = "dev")]
-    app.add_systems(OnEnter(GameState::Intro), |mut commands: Commands| {
-        commands.set_state(GameState::PhaseOne);
-    });
+    // #[cfg(feature = "dev")]
+    // app.add_systems(OnEnter(GameState::Intro), |mut commands: Commands| {
+    //     commands.set_state(GameState::PhaseTwo);
+    // });
 
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<IntroAssets>())
         .add_sub_state::<Intro>()
@@ -303,16 +303,17 @@ fn flavor_text(mut commands: Commands) {
                 |mut commands: Commands,
                  fractal: Single<Entity, With<Fractal>>,
                  assets: Res<IntroAssets>| {
-                    commands
-                        .entity(*fractal)
-                        .insert(ResetFractal)
-                        .insert((Iterations(0.0), FractalTexture(assets.odd_julia.clone())));
+                    commands.entity(*fractal).insert(ResetFractal).insert((
+                        Opacity(0.0),
+                        Iterations(0.0),
+                        FractalTexture(assets.odd_julia.clone()),
+                    ));
                 }
             ),
-            await_input((
+            unskippable((
                 FadeIn::default(),
                 pretty!(
-                    "|1|How long have [you](red) been there,|0.5|<0.85> [watching me](glitch)?"
+                    "|1|How long have [you](red) been there,|0.5|<0.85> [watching me](glitch)?|1|"
                 )
             )),
             system(
@@ -321,9 +322,15 @@ fn flavor_text(mut commands: Commands) {
                     texture.0 = assets.odd_julia.clone();
                 }
             ),
-            await_finish((
+            system(|mut opacity: Single<&mut Opacity, With<Fractal>>| {
+                opacity.0 = 1.0;
+            }),
+            system(|mut opacity: Single<&mut Opacity, With<Fractal>>| {
+                opacity.0 = 0.0;
+            }),
+            unskippable((
                 FadeIn::default(),
-                pretty!("Do [you](red)|0.1| [hate](glitch) me?|0.25|")
+                pretty!("Do [you](red)|0.1| [hate](glitch) me?|0.1|")
             )),
             system(
                 |mut texture: Single<&mut FractalTexture, With<Fractal>>,
@@ -332,14 +339,17 @@ fn flavor_text(mut commands: Commands) {
                 }
             ),
             system(|mut opacity: Single<&mut Opacity, With<Fractal>>| {
+                opacity.0 = 1.0;
+            }),
+            system(|mut opacity: Single<&mut Opacity, With<Fractal>>| {
                 opacity.0 = 0.0;
             }),
-            await_input((
+            unskippable((
                 FadeIn::default(),
                 pretty!(
                     "|1|<0.9>I move my hand over [you](red)|0.25|<1.15> but it<1> \
                     does not block [your](red) \
-                    <0.8>[bleeding glow](glitch)<0.5>...|1|<1> but it is not light I see."
+                    <0.8>[bleeding glow](glitch)<0.5>...|1|<1> yet it is not light I see.|1|"
                 )
             )),
             set_state(GameState::PhaseOne),
@@ -384,7 +394,7 @@ fn controls_bundle(
             ),
             system(move |mut commands: Commands| {
                 commands.entity(entity).with_child((
-                    Loop,
+                    Loop::Infinitely,
                     AnimationTarget(entity),
                     animations![
                         (

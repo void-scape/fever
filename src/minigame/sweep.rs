@@ -13,9 +13,9 @@ pub fn sweep_plugin(app: &mut App) {
         )
         .add_systems(
             OnEnter(GameState::PhaseTwo),
-            spawn_phase_one.in_set(MinigameSpawnSystems),
+            spawn_phase_two.in_set(MinigameSpawnSystems),
         )
-        .add_systems(Update, (mash, check_success).chain());
+        .add_systems(Update, (sweep, check_success).chain());
 }
 
 #[derive(AssetCollection, Resource)]
@@ -155,7 +155,112 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<SweepAssets>) {
     }
 }
 
-fn mash(
+fn spawn_phase_two(mut commands: Commands, assets: Res<SweepAssets>) {
+    target(
+        &mut commands,
+        3.0,
+        assets.bands.clone(),
+        assets.zap.clone(),
+        Vec2::new(0.44380, -0.373566),
+        15,
+        20,
+    );
+    target(
+        &mut commands,
+        3.0,
+        assets.inferno.clone(),
+        assets.power_life.clone(),
+        Vec2::new(0.233425, -0.5347365),
+        15,
+        20,
+    );
+    target(
+        &mut commands,
+        3.0,
+        assets.glitch.clone(),
+        assets.rabbit.clone(),
+        Vec2::new(-0.171291, -0.649680),
+        15,
+        10,
+    );
+    target(
+        &mut commands,
+        3.0,
+        assets.blind_magma.clone(),
+        assets.melo.clone(),
+        Vec2::new(-1.76561, -0.009970),
+        15,
+        15,
+    );
+
+    fn target(
+        commands: &mut Commands,
+        time: f32,
+        texture: Handle<Image>,
+        music: Handle<AudioSample>,
+        target: Vec2,
+        count: usize,
+        iterations: usize,
+    ) {
+        let tdur = 1.0;
+        commands
+            .spawn((
+                Minigame,
+                WinSfx,
+                LooseSfx,
+                Available,
+                MinigameTimer::duration(time),
+                ControlsTransition::Mouse,
+                ControlTips("BACK AND FORTH"),
+                TransitionDuration(tdur / 2.0),
+                DespawnOnExit(GameState::PhaseTwo),
+                Count(count),
+                StartCount(count),
+            ))
+            .observe(
+                move |enter: On<Insert, EnterMinigame>,
+                      mut commands: Commands,
+                      completed: Res<CompletedMinigames>,
+                      fractal: Single<Entity, With<Fractal>>| {
+                    commands.entity(*fractal).insert(ResetFractal).insert((
+                        FractalTexture(texture.clone()),
+                        Iterations(iterations as f32),
+                        Mandelbrot(1),
+                        BurningShip(1),
+                        Zoom(1.5),
+                        CPlane(target),
+                    ));
+
+                    commands
+                        .entity(enter.entity)
+                        .insert((Active, ZoomSmooth(1.5), MouseAccum::default()))
+                        .insert((
+                            SamplerBuilder::new(SamplePlayer::new(music.clone()).looping())
+                                .volume(0.0)
+                                .lpf(Lpf::MIN)
+                                .build(),
+                            AnimationTarget::entity(),
+                            PlaybackSettings::default()
+                                .with_speed(0.8 * completed.pitch_modifier()),
+                            animations![fade_volume(1.0, 0.8)],
+                        ));
+
+                    commands.run_system_cached(lock_camera);
+                },
+            )
+            .observe(
+                move |exit: On<Insert, ExitMinigame>, mut commands: Commands| {
+                    commands
+                        .entity(exit.entity)
+                        .despawn_related::<Animations>()
+                        .remove::<AnimationComponents>()
+                        .insert(parallel![fade_volume(tdur, 0.0),]);
+                },
+            );
+    }
+}
+
+fn sweep(
     time: Res<Time>,
     mut input: MessageReader<MouseMotion>,
     mut lpf: Single<&mut Lpf, With<Active>>,

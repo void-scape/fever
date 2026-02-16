@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use bevy::prelude::*;
+use bevy::{post_process::effect_stack::ChromaticAberration, prelude::*};
 use bevy_asset_loader::prelude::*;
 use bevy_rand::{global::GlobalRng, prelude::WyRand};
 use bevy_seedling::prelude::*;
@@ -16,9 +16,9 @@ pub fn matching_plugin(app: &mut App) {
     )
     .add_systems(
         OnEnter(GameState::PhaseTwo),
-        spawn_phase_one.in_set(MinigameSpawnSystems),
+        spawn_phase_two.in_set(MinigameSpawnSystems),
     )
-    .add_systems(Update, reach_target);
+    .add_systems(Update, reach_target.before(AnimationSystems::Interpolate));
 }
 
 #[derive(AssetCollection, Resource)]
@@ -40,6 +40,15 @@ struct MatchingAssets {
     t2: Handle<Image>,
     #[asset(path = "images/matching/3.png")]
     t3: Handle<Image>,
+    //
+    #[asset(path = "images/matching2/0.png")]
+    tt0: Handle<Image>,
+    #[asset(path = "images/matching2/1.png")]
+    tt1: Handle<Image>,
+    #[asset(path = "images/matching2/2.png")]
+    tt2: Handle<Image>,
+    #[asset(path = "images/matching2/3.png")]
+    tt3: Handle<Image>,
     //
     #[asset(path = "music/bong.ogg")]
     bong: Handle<AudioSample>,
@@ -148,7 +157,6 @@ fn spawn_phase_one(
                 move |enter: On<Insert, EnterMinigame>,
                       mut commands: Commands,
                       fractal: Single<Entity, With<Fractal>>,
-                      coords: JuliaCoordinates,
                       camera: Single<Entity, With<Camera>>| {
                     commands
                         .entity(*camera)
@@ -158,13 +166,20 @@ fn spawn_phase_one(
                         CPlane(Vec2::new(cx, cy) + dc),
                     ));
 
+                    let target = enter.entity;
+                    let id = commands.register_system(
+                        move |mut commands: Commands, coords: JuliaCoordinates| {
+                            commands.entity(target).insert(coords.transform(cx, cy));
+                        },
+                    );
+                    commands.run_system(id);
+
                     commands.entity(image).insert(ImageOf(enter.entity));
                     commands
                         .entity(enter.entity)
                         .insert((
                             Target,
                             Active,
-                            coords.transform(cx, cy),
                             SamplerBuilder::new(SamplePlayer::new(song.clone()).looping())
                                 .volume(0.0)
                                 .lpf(Lpf::MIN)
@@ -202,6 +217,211 @@ fn spawn_phase_one(
                             Easing::SineInOut,
                         ),
                         (AnimationTarget(exit.entity), fade_volume(tdur / 2.0, 0.0)),
+                    ]);
+
+                    if success.contains(exit.entity) {
+                        commands.entity(exit.entity).with_child((
+                            DespawnFinished,
+                            animations![
+                                system(
+                                    |mut camera: Single<&mut MovementSensitivity, With<Camera>>| {
+                                        camera.0 = 0.0;
+                                    },
+                                ),
+                                (
+                                    AnimationTarget(*fractal),
+                                    Duration(tdur / 3.0),
+                                    Keyframe(CPlane(Vec2::new(cx, cy))),
+                                    Easing::ExponentialOut
+                                )
+                            ],
+                        ));
+                    }
+                },
+            );
+    }
+}
+
+#[derive(Component)]
+struct LerpChromatic;
+
+fn spawn_phase_two(
+    mut commands: Commands,
+    assets: Res<MatchingAssets>,
+    mut rng: Single<&mut WyRand, With<GlobalRng>>,
+) {
+    target(
+        &mut commands,
+        assets.tt0.clone(),
+        assets.bong.clone(),
+        assets.bands.clone(),
+        &mut rng,
+        0.07,
+        -0.66707426,
+        -0.20865029,
+    );
+    target(
+        &mut commands,
+        assets.tt1.clone(),
+        assets.rabbit.clone(),
+        assets.contrast.clone(),
+        &mut rng,
+        0.07,
+        -1.36,
+        -0.06466669,
+    );
+    target(
+        &mut commands,
+        assets.tt2.clone(),
+        assets.bong.clone(),
+        assets.star_ship.clone(),
+        &mut rng,
+        0.07,
+        0.68800014,
+        -1.219,
+    );
+    target(
+        &mut commands,
+        assets.tt3.clone(),
+        assets.melo.clone(),
+        assets.glitch.clone(),
+        &mut rng,
+        0.07,
+        -0.26645756,
+        -1.1298208,
+    );
+
+    fn target(
+        commands: &mut Commands,
+        image: Handle<Image>,
+        song: Handle<AudioSample>,
+        texture: Handle<Image>,
+        rng: &mut impl Rng,
+        r: f32,
+        cx: f32,
+        cy: f32,
+    ) {
+        let dc = Vec2::from_angle(rng.random_range(0.0..TAU)) * r;
+        let tdur = 1.0;
+
+        let image = commands
+            .spawn((
+                ImageNode {
+                    image: image.clone(),
+                    ..default()
+                },
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(20.0),
+                    top: Val::Px(20.0),
+                    width: Val::Percent(35.0),
+                    ..default()
+                },
+                ImageColor(Color::WHITE.with_alpha(0.0)),
+            ))
+            .id();
+
+        commands
+            .spawn((
+                Minigame,
+                WinSfx,
+                LooseSfx,
+                Available,
+                MinigameTimer::duration(10.0),
+                ControlsTransition::Wasd,
+                TransitionDuration(tdur / 2.0),
+                DespawnOnExit(GameState::PhaseTwo),
+            ))
+            .observe(
+                move |enter: On<Insert, EnterMinigame>,
+                      mut commands: Commands,
+                      fractal: Single<Entity, With<Fractal>>,
+                      completed: Res<CompletedMinigames>,
+                      camera: Single<Entity, With<Camera>>| {
+                    commands.entity(*camera).insert((
+                        MovementSensitivity::default(),
+                        ChromaticAberration {
+                            intensity: 0.0,
+                            ..Default::default()
+                        },
+                        AberrationIntensity(0.0),
+                    ));
+                    commands.entity(*fractal).insert(ResetFractal).insert((
+                        FractalTexture(texture.clone()),
+                        CPlane(Vec2::new(cx, cy) + dc),
+                        BurningShip(1),
+                        Iterations(12.0),
+                    ));
+
+                    let target = enter.entity;
+                    let id = commands.register_system(
+                        move |mut commands: Commands, coords: JuliaCoordinates| {
+                            commands.entity(target).insert(coords.transform(cx, cy));
+                        },
+                    );
+                    commands.run_system(id);
+
+                    commands.entity(image).insert(ImageOf(enter.entity));
+                    commands
+                        .entity(enter.entity)
+                        .insert((
+                            Target,
+                            Active,
+                            SamplerBuilder::new(SamplePlayer::new(song.clone()).looping())
+                                .volume(0.0)
+                                .lpf(Lpf::MIN)
+                                .build(),
+                            PlaybackSettings::default()
+                                .with_speed(0.8 * completed.pitch_modifier()),
+                            AnimationTarget::entity(),
+                            parallel![
+                                fade_volume(1.0, 0.7),
+                                (
+                                    LerpChromatic,
+                                    AnimationTarget(*camera),
+                                    Duration(tdur / 2.0),
+                                    Keyframe(AberrationIntensity(0.05)),
+                                    Easing::SineInOut
+                                )
+                            ],
+                        ))
+                        .with_child((
+                            AnimationTarget(image),
+                            DespawnFinished,
+                            animations![
+                                Duration(0.3),
+                                (
+                                    AnimationTarget(image),
+                                    Duration(1.25),
+                                    Keyframe(ImageColor(Color::WHITE)),
+                                    Easing::SineInOut
+                                ),
+                            ],
+                        ));
+
+                    commands.run_system_cached(unlock_camera);
+                },
+            )
+            .observe(
+                move |exit: On<Insert, ExitMinigame>,
+                      mut commands: Commands,
+                      success: Query<(), With<WonMinigame>>,
+                      fractal: Single<Entity, With<Fractal>>,
+                      camera: Single<Entity, With<Camera>>| {
+                    commands.entity(exit.entity).with_child(parallel![
+                        (
+                            AnimationTarget(image),
+                            Duration(tdur / 3.0),
+                            Keyframe(ImageColor(Color::WHITE.with_alpha(0.0))),
+                            Easing::SineInOut,
+                        ),
+                        (AnimationTarget(exit.entity), fade_volume(tdur / 2.0, 0.0)),
+                        (
+                            AnimationTarget(*camera),
+                            Duration(tdur / 2.0),
+                            Keyframe(AberrationIntensity(0.0)),
+                            Easing::SineInOut
+                        ),
                     ]);
 
                     if success.contains(exit.entity) {

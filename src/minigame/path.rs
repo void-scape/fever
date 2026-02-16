@@ -15,7 +15,7 @@ pub fn path_plugin(app: &mut App) {
         )
         .add_systems(
             OnEnter(GameState::PhaseTwo),
-            spawn_phase_one.in_set(MinigameSpawnSystems),
+            spawn_phase_two.in_set(MinigameSpawnSystems),
         )
         .add_systems(Update, (intersect_targets, check_success).chain());
 }
@@ -31,6 +31,8 @@ struct PathAssets {
     star_ship: Handle<Image>,
     #[asset(path = "images/fractals/contrast.png")]
     contrast: Handle<Image>,
+    #[asset(path = "images/fractals/inferno.png")]
+    inferno: Handle<Image>,
     //
     #[asset(path = "music/power-life.ogg")]
     power_life: Handle<AudioSample>,
@@ -54,65 +56,75 @@ struct Target(f32);
 #[derive(Clone, Copy, Component)]
 struct Active;
 
-fn spawn_phase_one(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoordinates) {
+fn spawn_phase_one(mut commands: Commands, assets: Res<PathAssets>) {
     target(
         &mut commands,
         8.0,
         assets.god.clone(),
         assets.zap.clone(),
-        children![
-            (Target(10.0), c.transform(0.12925337, 0.7643622)),
-            (Target(10.0), c.transform(-0.43770975, 0.9620131)),
-            (Target(10.0), c.transform(-0.60180664, -0.07361984)),
-            (Target(10.0), c.transform(0.48981094, 0.8597144)),
-        ],
+        |c| {
+            children![
+                (Target(10.0), c.transform(0.12925337, 0.7643622)),
+                (Target(10.0), c.transform(-0.43770975, 0.9620131)),
+                (Target(10.0), c.transform(-0.60180664, -0.07361984)),
+                (Target(10.0), c.transform(0.48981094, 0.8597144)),
+            ]
+        },
     );
     target(
         &mut commands,
         8.0,
         assets.star_ship.clone(),
         assets.power_life.clone(),
-        children![
-            (Target(10.0), c.transform(0.39360046, 0.22105403)),
-            (Target(10.0), c.transform(0.50511175, 0.39056396)),
-            (Target(10.0), c.transform(0.48820877, 0.6109084)),
-            (Target(10.0), c.transform(0.26229095, 0.81796634)),
-            (Target(10.0), c.transform(-0.21299359, 0.64798725)),
-        ],
+        |c| {
+            children![
+                (Target(10.0), c.transform(0.39360046, 0.22105403)),
+                (Target(10.0), c.transform(0.50511175, 0.39056396)),
+                (Target(10.0), c.transform(0.48820877, 0.6109084)),
+                (Target(10.0), c.transform(0.26229095, 0.81796634)),
+                (Target(10.0), c.transform(-0.21299359, 0.64798725)),
+            ]
+        },
     );
     target(
         &mut commands,
         8.0,
         assets.contrast.clone(),
         assets.zap.clone(),
-        children![
-            (Target(10.0), c.transform(-0.3643189, -0.6188507)),
-            (Target(10.0), c.transform(-0.5354081, -0.6015929)),
-            (Target(10.0), c.transform(-0.16873938, -0.64779276)),
-            (Target(10.0), c.transform(-0.60802084, -0.17068857)),
-            (Target(10.0), c.transform(-0.4474144, 0.020050056)),
-        ],
+        |c| {
+            children![
+                (Target(10.0), c.transform(-0.3643189, -0.6188507)),
+                (Target(10.0), c.transform(-0.5354081, -0.6015929)),
+                (Target(10.0), c.transform(-0.16873938, -0.64779276)),
+                (Target(10.0), c.transform(-0.60802084, -0.17068857)),
+                (Target(10.0), c.transform(-0.4474144, 0.020050056)),
+            ]
+        },
     );
     target(
         &mut commands,
         8.0,
         assets.star_ship.clone(),
         assets.power_life.clone(),
-        children![
-            (Target(10.0), c.transform(0.074550614, -0.54670715)),
-            (Target(10.0), c.transform(-0.21527101, -0.62417215)),
-            (Target(10.0), c.transform(0.073577866, -0.39602274)),
-            (Target(10.0), c.transform(-0.2700196, -0.27401727)),
-        ],
+        |c| {
+            children![
+                (Target(10.0), c.transform(0.074550614, -0.54670715)),
+                (Target(10.0), c.transform(-0.21527101, -0.62417215)),
+                (Target(10.0), c.transform(0.073577866, -0.39602274)),
+                (Target(10.0), c.transform(-0.2700196, -0.27401727)),
+            ]
+        },
     );
 
-    fn target(
+    fn target<T>(
         commands: &mut Commands,
         time: f32,
         texture: Handle<Image>,
         music: Handle<AudioSample>,
-        targets: impl Bundle,
-    ) {
+        targets: impl Fn(JuliaCoordinates) -> T + Send + Sync + 'static + Clone,
+    ) where
+        T: Bundle,
+    {
         let time = if DEBUGGER { 9999999.0 } else { time };
         let tdur = 2.0;
         commands
@@ -127,7 +139,6 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoor
                 TransitionDuration(tdur / 2.0),
                 DespawnOnExit(GameState::PhaseOne),
                 TargetRoot,
-                targets,
             ))
             .observe(
                 move |enter: On<Insert, EnterMinigame>,
@@ -138,6 +149,15 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoor
                         Mandelbrot(1),
                         Zoom(1.5),
                     ));
+
+                    let root = enter.entity;
+                    let targets = targets.clone();
+                    let id = commands.register_system(
+                        move |mut commands: Commands, c: JuliaCoordinates| {
+                            commands.entity(root).insert(targets(c));
+                        },
+                    );
+                    commands.run_system(id);
 
                     commands
                         .entity(enter.entity)
@@ -185,6 +205,154 @@ fn spawn_phase_one(mut commands: Commands, assets: Res<PathAssets>, c: JuliaCoor
     }
 }
 
+fn spawn_phase_two(mut commands: Commands, assets: Res<PathAssets>, massets: Res<MinigameAssets>) {
+    target(
+        &mut commands,
+        8.0,
+        massets.pl_julia.clone(),
+        assets.zap.clone(),
+        |c| {
+            children![
+                (Target(12.0), c.transform(-1.5577962, -0.17125653)),
+                (Target(12.0), c.transform(-0.9810546, 0.43689775)),
+                (Target(12.0), c.transform(0.8451825, 0.36206055)),
+            ]
+        },
+    );
+    target(
+        &mut commands,
+        8.0,
+        massets.odd_julia.clone(),
+        assets.power_life.clone(),
+        |c| {
+            children![
+                (Target(12.0), c.transform(-1.425179, 0.062109407)),
+                (Target(12.0), c.transform(0.6056967, 0.2403157)),
+                (Target(12.0), c.transform(-1.114502, 0.3475911)),
+            ]
+        },
+    );
+    target(
+        &mut commands,
+        8.0,
+        massets.last_breath.clone(),
+        assets.zap.clone(),
+        |c| {
+            children![
+                (Target(12.0), c.transform(0.42421883, 0.2710611)),
+                (Target(12.0), c.transform(-0.5822266, 0.301481)),
+                (Target(12.0), c.transform(0.67626953, 0.6155273)),
+            ]
+        },
+    );
+    target(
+        &mut commands,
+        8.0,
+        assets.inferno.clone(),
+        assets.power_life.clone(),
+        |c| {
+            children![
+                (Target(12.0), c.transform(-0.6611166, 0.1682943)),
+                (Target(12.0), c.transform(-0.2508626, 0.3941242)),
+                (Target(12.0), c.transform(-1.1486816, 0.5040852)),
+            ]
+        },
+    );
+
+    fn target<T>(
+        commands: &mut Commands,
+        time: f32,
+        texture: Handle<Image>,
+        music: Handle<AudioSample>,
+        targets: impl Fn(JuliaCoordinates) -> T + Send + Sync + 'static + Clone,
+    ) where
+        T: Bundle,
+    {
+        let time = if DEBUGGER { 9999999.0 } else { time };
+        let tdur = 1.0;
+        commands
+            .spawn((
+                Minigame,
+                WinSfx,
+                LooseSfx,
+                Available,
+                MinigameTimer::duration(time),
+                ControlsTransition::Mouse,
+                ControlTips("FIND THE TARGET"),
+                TransitionDuration(tdur / 2.0),
+                DespawnOnExit(GameState::PhaseTwo),
+                TargetRoot,
+            ))
+            .observe(
+                move |enter: On<Insert, EnterMinigame>,
+                      mut commands: Commands,
+                      completed: Res<CompletedMinigames>,
+                      fractal: Single<Entity, With<Fractal>>| {
+                    commands.entity(*fractal).insert(ResetFractal).insert((
+                        FractalTexture(texture.clone()),
+                        Mandelbrot(1),
+                        BurningShip(1),
+                        Iterations(6.0),
+                        Opacity(0.9),
+                        Zoom(1.5),
+                    ));
+
+                    let root = enter.entity;
+                    let targets = targets.clone();
+                    let id = commands.register_system(
+                        move |mut commands: Commands, c: JuliaCoordinates| {
+                            commands.entity(root).insert(targets(c));
+                        },
+                    );
+                    commands.run_system(id);
+
+                    commands
+                        .entity(enter.entity)
+                        .insert((
+                            PathOpacity(0.0),
+                            SamplerBuilder::new(SamplePlayer::new(music.clone()).looping())
+                                .volume(0.0)
+                                .lpf(Lpf::MIN)
+                                .build(),
+                            PlaybackSettings::default()
+                                .with_speed(0.8 * completed.pitch_modifier()),
+                            AnimationTarget::entity(),
+                            animations![fade_volume(1.0, 0.8)],
+                        ))
+                        .with_child((
+                            DespawnFinished,
+                            AnimationTarget(enter.entity),
+                            animations![(
+                                Duration(tdur),
+                                Keyframe(PathOpacity(1.0)),
+                                Easing::SineInOut
+                            )],
+                        ))
+                        .insert_recursive::<Children>(Active);
+
+                    commands.run_system_cached(lock_camera);
+                    commands.run_system_cached(force_camera_origin);
+                },
+            )
+            .observe(
+                move |exit: On<Insert, ExitMinigame>, mut commands: Commands| {
+                    commands.entity(exit.entity).with_child((
+                        AnimationTarget(exit.entity),
+                        parallel![
+                            (
+                                Duration(tdur),
+                                Keyframe(PathOpacity(0.0)),
+                                Easing::SineInOut
+                            ),
+                            fade_volume(tdur, 0.0),
+                        ],
+                    ));
+                    commands.run_system_cached(unforce_camera_origin);
+                },
+            );
+    }
+}
+
 #[derive(Component)]
 struct Hovered;
 
@@ -194,6 +362,7 @@ struct LastC(Vec2);
 fn intersect_targets(
     mut commands: Commands,
     mut gizmos: Gizmos,
+    // time: Res<Time>,
     targets: Query<(Entity, &Target, &Transform, Has<Hovered>), With<Active>>,
     mut last_c: Single<&mut LastC, (With<TargetRoot>, With<Active>)>,
     mut lpf: Single<&mut Lpf, With<Active>>,
@@ -203,10 +372,15 @@ fn intersect_targets(
     coords: JuliaCoordinates,
     path_opacity: Single<&PathOpacity>,
     fade_out: Single<Has<ExitMinigame>, (With<Active>, With<TargetRoot>)>,
+    burning_ship: Single<&BurningShip, With<Fractal>>,
+    // mut rotation: Single<&mut Rotation, With<Fractal>>,
     //
     input: Res<ButtonInput<KeyCode>>,
     mut position: Local<Vec2>,
 ) {
+    // TODO: ROTATE
+    // rotation.0 += time.delta_secs() * 0.02 * path_opacity.0;
+
     for (_, target, transform, is_hovered) in targets.iter() {
         gizmos.circle_2d(
             Isometry2d::from_translation(transform.translation.xy()),
@@ -250,7 +424,11 @@ fn intersect_targets(
             if z.length_squared() > 4.0 * 4.0 {
                 break;
             }
-            z = cmul(z, z) + c;
+            if burning_ship.0 == 0 {
+                z = cmul(z, z) + c;
+            } else {
+                z = cmul(z.abs(), z.abs()) + c;
+            }
             path.push(z);
         }
 
@@ -316,6 +494,10 @@ fn check_success(
     targets: Query<(), (With<Target>, Without<Hovered>, With<Active>)>,
     root: Single<Entity, (With<TargetRoot>, Without<ExitMinigame>, With<Active>)>,
 ) {
+    if DEBUGGER {
+        return;
+    }
+
     if targets.is_empty() {
         commands.entity(*root).insert(WonMinigame);
     }

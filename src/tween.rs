@@ -1,13 +1,33 @@
 use crate::prelude::*;
-use bevy::prelude::*;
+use bevy::{post_process::effect_stack::ChromaticAberration, prelude::*};
 use fever_macros::Lerp;
 
 pub fn tween_plugin(app: &mut App) {
     app.add_systems(
         Update,
-        (image_color, ui_translation, text_color, translation_2d)
+        (
+            image_color,
+            ui_translation,
+            text_color,
+            translation_2d,
+            aberration_intensity,
+        )
             .after(AnimationSystems::Interpolate),
     );
+}
+
+#[derive(Default, Clone, Copy, Component, Lerp, Deref, DerefMut)]
+pub struct AberrationIntensity(pub f32);
+
+fn aberration_intensity(
+    mut aberrations: Query<
+        (&mut ChromaticAberration, &AberrationIntensity),
+        Changed<AberrationIntensity>,
+    >,
+) {
+    for (mut abberation, intensity) in aberrations.iter_mut() {
+        abberation.intensity = intensity.0;
+    }
 }
 
 #[derive(Default, Clone, Copy, Component, Lerp, Deref, DerefMut)]

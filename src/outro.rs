@@ -1,99 +1,85 @@
 use crate::prelude::*;
 use bevy::prelude::*;
+use bevy_asset_loader::prelude::*;
+use bevy_seedling::prelude::*;
 
 pub fn outro_plugin(app: &mut App) {
-    app.add_systems(OnEnter(GameState::Outro), exit);
+    app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<OutroAssets>())
+        .add_systems(OnEnter(GameState::Outro), animation);
 }
 
-fn exit(
+#[derive(AssetCollection, Resource)]
+struct OutroAssets {
+    #[asset(path = "third-party/wind.ogg")]
+    wind: Handle<AudioSample>,
+}
+
+fn animation(
     mut commands: Commands,
-    camera: Single<Entity, With<CameraTransition>>,
+    assets: Res<OutroAssets>,
+    text: Query<(Entity, &TextColor)>,
+    music: Single<Entity, With<typing::Music>>,
     fractal: Single<Entity, With<Fractal>>,
+    camera: Single<Entity, With<Camera>>,
 ) {
-    commands.entity(*fractal).insert(Opacity(0.0));
-    commands
-        .entity(*camera)
-        .insert(CameraTransitionProgress(0.0));
-    commands.spawn((
-        AnimationTarget(*camera),
-        DespawnFinished,
-        animations![
-            (Duration(2.0), Keyframe(CameraTransitionProgress(1.0))),
-            text_node("Thank you for playing!", 3.0),
-            text_node(
-                "I could not have made this game without my lovely \
-                playtester, Corvus Prudens.",
-                6.0
+    for (entity, color) in text.iter() {
+        commands
+            .entity(entity)
+            .insert(TextColorTween(color.0))
+            .with_child(animations![(
+                AnimationTarget(entity),
+                Duration(5.0),
+                Keyframe(TextColorTween(color.0.with_alpha(0.0))),
+                Easing::SineInOut
+            )]);
+    }
+
+    let wind = commands
+        .spawn(
+            SamplerBuilder::new(SamplePlayer::new(assets.wind.clone()).looping())
+                .volume(0.0)
+                .build(),
+        )
+        .id();
+
+    commands.spawn(animations![
+        Duration(2.5),
+        parallel![
+            (
+                AnimationTarget(*music),
+                Duration(20.0),
+                Keyframe(LinearVolume(0.0)),
+                Easing::SineInOut,
             ),
-            text_node("I would love to hear how this game made you feel <3", 5.0),
-            text_node("Good luck.", 2.0),
-            system(|mut writer: MessageWriter<AppExit>| {
-                writer.write(AppExit::Success);
-            }),
+            (
+                AnimationTarget(wind),
+                Duration(20.0),
+                Keyframe(LinearVolume(0.5)),
+                Easing::SineInOut,
+            ),
+            (
+                AnimationTarget(*camera),
+                Duration(15.0),
+                Keyframe(AberrationIntensity(0.0)),
+                Easing::SineInOut,
+            ),
+            animations![
+                (
+                    AnimationTarget(*fractal),
+                    Duration(25.0),
+                    Keyframe(Iterations(0.0)),
+                    Easing::SineInOut,
+                ),
+                (
+                    AnimationTarget(*fractal),
+                    Duration(10.0),
+                    Keyframe(Opacity(0.0)),
+                    Easing::SineInOut,
+                )
+            ],
         ],
-    ));
-}
-
-fn text_node(text: &'static str, duration: f32) -> impl Bundle {
-    #[derive(Component)]
-    struct Finished;
-
-    blocking_system(
-        move |mut commands: Commands,
-              mut entity: Local<Option<Entity>>,
-              finished: Query<Entity, With<Finished>>| {
-            entity.get_or_insert_with(|| {
-                let entity = commands.spawn_empty().id();
-                commands
-                    .entity(entity)
-                    .insert((
-                        Node {
-                            width: percent(100.0),
-                            height: percent(100.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        BackgroundColor(Color::BLACK),
-                        GlobalZIndex(500),
-                        children![(
-                            Node {
-                                width: percent(50.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..Default::default()
-                            },
-                            Text::new(text),
-                            TextFont::from_font_size(50.0),
-                            TextLayout::new_with_justify(Justify::Center),
-                            AnimationTarget::entity(),
-                            TextColorTween(Color::WHITE.with_alpha(0.0)),
-                            animations![
-                                (
-                                    Duration(1.0),
-                                    Keyframe(TextColorTween(Color::WHITE)),
-                                    Easing::SineInOut
-                                ),
-                                Duration((duration - 2.0).max(1.0)),
-                                (
-                                    Duration(1.0),
-                                    Keyframe(TextColorTween(Color::WHITE.with_alpha(0.0))),
-                                    Easing::SineInOut
-                                ),
-                                system(move |mut commands: Commands| {
-                                    commands.entity(entity).insert(Finished);
-                                }),
-                            ]
-                        )],
-                    ))
-                    .id()
-            });
-            let mut result = false;
-            for entity in finished.iter() {
-                result = true;
-                commands.entity(entity).despawn();
-            }
-            result
-        },
-    )
+        system(|mut writer: MessageWriter<AppExit>| {
+            writer.write(AppExit::Success);
+        })
+    ]);
 }

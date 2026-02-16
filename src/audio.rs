@@ -94,7 +94,7 @@ fn linear_volume(
 }
 
 #[derive(Clone, Copy, Component, Lerp)]
-#[require(LowPass::new(20_000.0, 44_100.0))]
+#[require(LowPass::new(25.0, 60.0))]
 pub struct Lpf(pub f32);
 
 impl Default for Lpf {

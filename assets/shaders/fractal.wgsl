@@ -10,7 +10,8 @@ struct Fractal {
 	burning_ship: u32,
 	mandelbrot: u32,
 	opacity: f32,
-	_pad: vec3<f32>,
+	rotation: f32,
+	_pad: vec2<f32>,
 }
 
 @group(2) @binding(0) var<uniform> args: Fractal;
@@ -38,12 +39,16 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 	var c: vec2<f32>;
 	var z: vec2<f32>;
 	let p = (mesh.uv * 2.0 - 1.0) * args.zoom;
+
+    let rot = vec2(cos(args.rotation), sin(args.rotation));
+    let point = cmul(p, rot);
+
 	if args.mandelbrot == 1 {
-		c = p + vec2(args.cx, args.cy);
+		c = point + vec2(args.cx, args.cy);
 		z = vec2(0.0, 0.0);
 	} else {
 		c = vec2(args.cx, args.cy);
-		z = p;
+		z = point;
 	}
 
 	for (var i = 0; i < i32(args.iterations); i++) {

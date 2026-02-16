@@ -149,7 +149,11 @@ pub struct Finished;
 
 #[derive(Default, Component)]
 #[require(Playhead, Duration)]
-pub struct Loop;
+pub enum Loop {
+    #[default]
+    Infinitely,
+    For(usize),
+}
 
 fn end<T: Component<Mutability = Mutable> + Lerp + Clone>(
     added: On<Add, Finished>,
@@ -210,11 +214,16 @@ fn advance(
     inserted: On<Insert, Advance>,
     mut commands: Commands,
     advance: Query<&Advance>,
-    roots: Query<(&Animations, Option<&AnimationOf>, Has<Parallel>, Has<Loop>)>,
+    mut roots: Query<(
+        &Animations,
+        Option<&AnimationOf>,
+        Has<Parallel>,
+        Option<&mut Loop>,
+    )>,
     leaves: Query<Entity, Without<Finished>>,
 ) {
     let remainder = advance.get(inserted.entity).unwrap().0;
-    let (children, parent, is_parallel, is_loop) = roots.get(inserted.entity).unwrap();
+    let (children, parent, is_parallel, mut lop) = roots.get_mut(inserted.entity).unwrap();
     let mut finished = false;
     if is_parallel {
         if leaves.iter_many(children.iter()).next().is_none() {
@@ -231,11 +240,29 @@ fn advance(
         }
     }
     if finished {
-        if is_loop {
-            commands
-                .entity(inserted.entity)
-                .remove_recursive::<Animations, Finished>()
-                .insert((Active, Playhead(remainder)));
+        if let Some(mut lop) = lop {
+            match lop.as_mut() {
+                Loop::Infinitely => {
+                    commands
+                        .entity(inserted.entity)
+                        .remove_recursive::<Animations, Finished>()
+                        .insert((Active, Playhead(remainder)));
+                }
+                Loop::For(count) => {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        commands.entity(inserted.entity).insert(Finished);
+                        if let Some(parent) = parent {
+                            commands.entity(parent.0).insert(Advance(remainder));
+                        }
+                    } else {
+                        commands
+                            .entity(inserted.entity)
+                            .remove_recursive::<Animations, Finished>()
+                            .insert((Active, Playhead(remainder)));
+                    }
+                }
+            }
         } else {
             commands.entity(inserted.entity).insert(Finished);
             if let Some(parent) = parent {
@@ -265,10 +292,10 @@ fn playhead(
     scale: Res<DeltaScale>,
 ) {
     let dt = time.delta_secs() * scale.0;
-    for (entity, mut playhead, duration, parent, is_loop) in leaves.iter_mut() {
+    for (entity, mut playhead, duration, parent, has_loop) in leaves.iter_mut() {
         playhead.0 += dt;
         if playhead.0 >= duration.0 {
-            if is_loop {
+            if has_loop {
                 playhead.0 %= duration.0;
             } else {
                 commands.entity(entity).remove::<Active>().insert(Finished);

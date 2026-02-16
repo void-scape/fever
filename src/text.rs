@@ -11,7 +11,7 @@ pub fn text_plugin(app: &mut App) {
         .add_systems(OnEnter(GameState::PhaseOne), narrator_glyph);
 }
 
-fn text_node(text: impl Bundle) -> impl Bundle {
+fn text_node(_font: Handle<Font>, text: impl Bundle) -> impl Bundle {
     (
         Node {
             width: percent(100.0),
@@ -29,34 +29,27 @@ fn text_node(text: impl Bundle) -> impl Bundle {
                 ..Default::default()
             },
             text,
-            TextFont::from_font_size(50.0),
+            TextFont {
+                font_size: 50.0,
+                // font,
+                ..Default::default()
+            },
             TextLayout::new_with_justify(Justify::Center),
             Typewriter::new(15.0),
         )],
     )
 }
 
-pub fn await_finish(text: impl Bundle) -> impl Bundle {
+pub fn unskippable(text: impl Bundle) -> impl Bundle {
     let mut text = Some(text);
     blocking_system(
         move |mut commands: Commands,
               advance: Query<Entity, With<Advance>>,
               mut entity: Local<Option<Entity>>,
-              input: Res<ButtonInput<KeyCode>>,
-              typewriters: Query<Entity, With<Typewriter>>,
-              mut fractal: Single<&mut Opacity, With<Fractal>>| {
-            fractal.0 = 0.0;
+              assets: Res<MinigameAssets>| {
             if let Some(text) = text.take() {
-                *entity = Some(commands.spawn(text_node(text)).id());
+                *entity = Some(commands.spawn(text_node(assets.font.clone(), text)).id());
             }
-
-            if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
-                for entity in typewriters.iter() {
-                    commands.entity(entity).insert(FinishTypewriter);
-                }
-                return false;
-            }
-
             let result = !advance.is_empty();
             for entity in advance.iter() {
                 commands.entity(entity).despawn();
@@ -65,53 +58,6 @@ pub fn await_finish(text: impl Bundle) -> impl Bundle {
                 commands.entity(entity).despawn();
             }
             result
-        },
-    )
-}
-
-pub fn await_input(text: impl Bundle) -> impl Bundle {
-    let mut text = Some(text);
-    blocking_system(
-        move |mut commands: Commands,
-              advance: Query<Entity, With<Advance>>,
-              input: Res<ButtonInput<KeyCode>>,
-              mut awaiting_input: Local<bool>,
-              mut entity: Local<Option<Entity>>,
-              typewriters: Query<Entity, With<Typewriter>>,
-              mut fractal: Single<&mut Opacity, With<Fractal>>| {
-            fractal.0 = 0.0;
-            if let Some(text) = text.take() {
-                *entity = Some(commands.spawn(text_node(text)).id());
-            }
-
-            if !*awaiting_input {
-                if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::Enter) {
-                    for entity in typewriters.iter() {
-                        commands.entity(entity).insert(FinishTypewriter);
-                    }
-                    *awaiting_input = true;
-                    return false;
-                }
-
-                for entity in advance.iter() {
-                    *awaiting_input = true;
-                    commands.entity(entity).despawn();
-                }
-                false
-            } else {
-                let result = input
-                    .get_just_pressed()
-                    .any(|k| *k == KeyCode::Space || *k == KeyCode::Enter);
-                if result && let Some(entity) = *entity {
-                    commands.entity(entity).despawn();
-                }
-                if result {
-                    for entity in advance.iter() {
-                        commands.entity(entity).despawn();
-                    }
-                }
-                result
-            }
         },
     )
 }

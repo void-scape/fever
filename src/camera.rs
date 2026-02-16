@@ -8,6 +8,7 @@ use bevy::{
         core_2d::graph::Node2d,
         fullscreen_material::{FullscreenMaterial, FullscreenMaterialPlugin},
     },
+    post_process::effect_stack::ChromaticAberration,
     prelude::*,
     render::{
         extract_component::ExtractComponent,
@@ -20,6 +21,7 @@ use fever_macros::Lerp;
 
 pub fn camera_plugin(app: &mut App) {
     app.init_resource::<TransitionPalette>()
+        .add_observer(reset_camera)
         .add_systems(OnExit(GameState::Loading), spawn)
         .add_systems(Update, move_camera.after(AnimationSystems::Interpolate))
         .add_plugins(FullscreenMaterialPlugin::<CameraTransition>::default())
@@ -36,6 +38,24 @@ fn spawn(mut commands: Commands) {
         Hdr,
         CameraTransition::default(),
     ));
+}
+
+#[derive(Component)]
+pub struct ResetCamera;
+
+fn reset_camera(camera: On<Insert, ResetCamera>, mut commands: Commands) {
+    commands
+        .entity(camera.entity)
+        .insert((
+            MovementSensitivity::default(),
+            CameraTransitionProgress(0.0),
+        ))
+        .remove::<(
+            ChromaticAberration,
+            AberrationIntensity,
+            ForceOrigin,
+            Stationary,
+        )>();
 }
 
 #[derive(Clone, Copy, Component, Lerp, Deref, DerefMut)]
@@ -175,9 +195,9 @@ impl FullscreenMaterial for CameraTransition {
 
     fn node_edges() -> Vec<InternedRenderLabel> {
         vec![
-            Node2d::Tonemapping.intern(),
+            Node2d::StartMainPassPostProcessing.intern(),
             Self::node_label().intern(),
-            Node2d::EndMainPassPostProcessing.intern(),
+            Node2d::Bloom.intern(),
         ]
     }
 }
