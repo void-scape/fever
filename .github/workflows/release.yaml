@@ -185,9 +185,6 @@ jobs:
 
           # Rustflags:
           RUSTFLAGS='-Zthreads=0'
-          if [ '${{ matrix.platform }}' != 'windows' ]; then
-            RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }"'-Zshare-generics=y'
-          fi
           # Set up platform library rpaths
           if [ '${{ matrix.platform }}' = 'linux' ]; then
             RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }"'-C link-arg=-Wl,-rpath,$ORIGIN'

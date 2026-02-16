@@ -10,7 +10,7 @@ use fever_macros::Lerp;
 pub fn intro_plugin(app: &mut App) {
     // #[cfg(feature = "dev")]
     // app.add_systems(OnEnter(GameState::Intro), |mut commands: Commands| {
-    //     commands.set_state(GameState::PhaseTwo);
+    //     commands.set_state(GameState::PhaseOne);
     // });
 
     app.add_loading_state(LoadingState::new(GameState::Loading).load_collection::<IntroAssets>())

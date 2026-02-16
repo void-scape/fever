@@ -11,7 +11,9 @@ fn restart(
     mut commands: Commands,
     mut palette: ResMut<TransitionPalette>,
     camera: Single<Entity, With<Camera>>,
+    mut completed: ResMut<CompletedMinigames>,
 ) {
+    completed.0 = 0;
     commands.entity(*camera).insert(ResetCamera);
     let tdur = 0.15;
     *palette = TransitionPalette::Red;
